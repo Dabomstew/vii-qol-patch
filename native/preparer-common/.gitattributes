@@ -1,0 +1,6 @@
+# Exact-byte shared native preparer snapshots.
+/.gitattributes -text
+/preparer.hpp -text
+/preparer.cpp -text
+/preparer_win32.cpp -text
+/session_test.cpp -text

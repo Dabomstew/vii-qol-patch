@@ -1,12 +1,19 @@
 # User guide
 
+For the first setup, run Prepare Game and choose **Prepare / Resume**. To update
+the patch or save settings without preparing assets again, use **Install / Update**.
+
 ## First installation
 
 Extract the release ZIP to a folder outside the game installation. Do not copy its files into the game folder by hand.
 
 Close Megadimension Neptunia VII and any tool that might keep its files open. Open the game folder containing `NeptuniaVII.exe`, then check whether it already contains `dinput8.dll`.
 
-If `dinput8.dll` is already present, do not overwrite it by hand. It can be another mod's DirectInput proxy. VII Prepare Game recognizes historical VII builds using a bundled SHA-256 list, including manual installations with missing or stale preparation state. It refuses unknown or modified DLLs even if a state INI claims ownership. Use a newer preparer if your installed VII build is newer than its list; an unrelated proxy conflict must be resolved first. The supported game executable has SHA-256:
+If `dinput8.dll` is already present, it may belong to another mod. Do not overwrite
+it by hand. Prepare Game checks its hash against a list of known VII patch builds,
+including manually installed copies. It leaves unknown or modified DLLs untouched.
+If you installed a newer VII patch, try its matching preparer. Resolve conflicts
+with other mods before installing. The supported game executable has SHA-256:
 
 ```
 7ff2aad55e965add3b6fc45bd0ad2158769de014d6f619dc564a50c3e0fa42d9
@@ -20,6 +27,9 @@ Get-FileHash .\NeptuniaVII.exe -Algorithm SHA256
 
 Run `VII-Prepare-Game.exe`. It may find a Steam installation automatically; otherwise choose **Game folder...** and select the folder containing `NeptuniaVII.exe` (selecting `CONTENTS` also works).
 
+The preparer checks the supported executable when selecting a folder, and again
+before changing installed files. Unsupported installations are refused.
+
 The default data locations are relative to that game folder:
 
 ```
@@ -32,13 +42,21 @@ Choose **Cache folder...** or **Unpacked assets...** to use another location, in
 
 Select **Prepare / Resume**. The tool extracts the game PACs, automatically includes a sibling `DLC` folder when present, prepares supported textures, then installs its matching proxy and updates `vii-patches.ini`. It keeps original PACs intact. DLC output is automatically derived by appending `.dlc` to the unpacked-data location; there is no separate DLC path to set.
 
-Wait for **Preparation complete**, then launch through Steam or your normal shortcut. **Play** applies the displayed settings and starts the game without full preparation; supported runtime misses will be persisted for later reuse. Opening the utility alone never starts preparation or the game.
+Wait for **Preparation complete**, then launch through Steam or your normal shortcut.
+**Play** installs the patch, saves the displayed settings and starts the game without
+preparing assets first. Supported textures missing from the cache can be added
+during play. Opening the utility alone does not start preparation or the game.
 
-Preparation needs substantial free space. An observed full base-plus-DLC install used about 21 GB for extracted data and 11.9 GB for cache records. These are observations, not a fixed requirement: leave roughly 35 GB or more free, and retain headroom because the persistent cache may grow.
+Allow roughly 35 GB or more of free space, with room for the cache to grow.
+One full base-game and DLC installation used about 21 GB for extracted assets
+and 11.9 GB for the texture cache. Your space use may differ.
 
 ## Cancel, resume, and repair
 
 **Cancel** stops at a safe boundary. Completed extracted files and prepared cache records are retained, checked on the next run, and reused when valid. Choose **Prepare / Resume** again to continue; it also repairs missing, corrupt, or interrupted managed records.
+
+Closing the window during preparation asks it to stop, then waits until it can
+close safely. Completed work remains available for the next run.
 
 If preparation stops with an error, read the message, keep the game closed, correct the reported condition (for example, free space or a proxy conflict), and resume. Do not delete original PACs or the managed unpacked folders to make an error disappear.
 
@@ -69,16 +87,22 @@ Run Prepare / Resume again after installing or removing DLC, repairing the game,
 
 Choose **Install / Update** to install the bundled patch and save the displayed
 settings. This does not scan textures, extract archives, or launch the game.
-Repeating an unchanged update preserves the last meaningful rollback snapshot.
+Repeating an unchanged update keeps the previous update backup.
 Use **Prepare / Resume** when you want to extract assets and prebuild textures.
 
 The window loads the three loading options and four optional gameplay choices
 from the existing INI. Loading improvements default on; gameplay changes default
 off. Explicit existing choices, including disabled loading options, are retained.
-**Reload settings** discards unsaved controls and reads the current file. If the
-INI changes while the window is open, applying the old choices stops so you can
-reload first. Maintenance buttons use saved installation state and do not apply
-unsaved controls. Closing during installation waits for it to finish safely.
+**Reload settings** reads the current file. If you have unsaved changes, choose
+**Discard changes** to reload or **Stay** to keep editing. The same prompt appears
+when changing the game folder, closing or starting maintenance. If the INI changes while
+the window is open, reload it before applying your choices. Rollback, uninstall
+and recovery use the saved installation and leave unsaved choices unapplied.
+Closing during installation waits for it to finish safely and does not launch
+the game afterward.
+
+The window scales with your display. You can select, copy and edit folder paths;
+enter full paths for cache and asset folders, such as `C:\Games\VII-cache`.
 
 The CLI supports the same settings and maintenance backend:
 
@@ -92,7 +116,7 @@ The CLI supports the same settings and maintenance backend:
 `--assets FOLDER` choose locations; `--set Key=0|1` accepts the seven displayed
 feature keys. `--settings` prints saved paths, flags and the INI SHA-256 as JSON.
 Scripts can pass that hash to `--if-config-hash HASH` when applying changes to
-refuse a stale read (an empty hash means no INI existed). `--gui --source GAME`
+avoid overwriting settings changed since they were read (an empty hash means no INI existed). `--gui --source GAME`
 opens the window without automatically starting work. Plain `--source GAME`
 still prepares and resumes.
 
@@ -113,10 +137,10 @@ The release defaults are:
 | `[MipCache] DiskDirectory` | `vii-speedrun-patch\cache` | Persistent cache location. |
 | `[Patches] MotionCache` | `1` | Enables the replay motion cache. |
 | `[MotionCache] Mode` / `BudgetMiB` | `Replay` / `16` | Replays cached motion data within a 16 MiB budget. |
-| `[Patches] LooseFiles` | `1` | Uses validated unpacked assets, with original-loader fallback. |
+| `[Patches] LooseFiles` | `1` | Loads checked unpacked assets; uses the game's normal loader if they cannot be used. |
 | `[LooseFiles] Directory` | `vii-speedrun-patch\unpacked` | Base extraction location; DLC is the derived `.dlc` folder. |
 | `[LooseFiles] Verify` | `0` | Checks expected size; `1` additionally hashes every opened loose file and is slower. |
-| `[Patches] NewGameDetector` | `1` | Publishes a read-only New Game sequence and transition pointer for `vii-new-game.asl`. |
+| `[Patches] NewGameDetector` | `1` | Lets `vii-new-game.asl` detect New Game and start the LiveSplit timer without writing game memory. |
 | `[Patches] LoadTiming` | `0` | Experimental read-only load timing bridge; covers battle-entry character, initial dungeon map, pre-control ADV script, normal world-map resource waits, synchronous title movie setup, and load-list metadata calls. See [load timing](LOAD-TIMING.md). |
 | `[LoadTiming] FPSUnlock` / `Trace` | `0` / `0` | Temporarily uncap the same detected waits, or log their boundaries. Requires LoadTiming. Keep global Neptasm FPSUnlock off for capped gameplay. |
 | `[Patches] AutoSkipEvents` | `0` | Automatically skips eligible ADV events when enabled. |
@@ -130,7 +154,7 @@ The release defaults are:
 | `[Neptasm] Resolution` / `ResolutionScale` | `0` / `1.0` | Scales supported 1920x1080 render targets by the selected multiplier. |
 | `[Neptasm] FitWindow` | `0` | Uses the window client area for the Direct3D swap-chain size. |
 | `[Neptasm] WindowControl` / `WindowWidth` / `WindowHeight` | `0` / `1920` / `1080` | Replaces the ten built-in window-size choices with one configured size. |
-| `[Neptasm] Ultrawide` | `0` | Expands the canonical 16:9 game viewport to the selected output; UI and unusual render passes retain the game's limitations. |
+| `[Neptasm] Ultrawide` | `0` | Expands the game's 16:9 view to the selected output size; some menus and effects may still assume 16:9. |
 | `[MipCache] Trace` / `CaptureSources` | `0` / `0` | Opt-in diagnostics; source capture is off by default. |
 
 An explicit custom `DiskDirectory` or `LooseFiles.Directory` is preserved when Prepare Game updates an existing managed installation. Keep the base unpacked folder and its derived `.dlc` folder together when moving them. Do not edit extracted files: invalid files use the original loader, and `Verify=0` cannot detect same-size edits.
@@ -169,8 +193,8 @@ Setting it to `1` makes the `[Neptasm]` controls available, but does not enable
 `Ultrawide` by itself. Enable and test one control at a time, then restart the
 game after every edit.
 
-For example, a bounded custom-window test needs both the layer and its
-specific control:
+For example, to use a custom window size, enable both the layer and the window
+control:
 
 ```ini
 [Patches]
@@ -184,26 +208,35 @@ WindowHeight=1440
 
 `ResolutionScale` only applies when `Resolution=1`; `WindowWidth` and
 `WindowHeight` only apply when `WindowControl=1`. `Ultrawide=1` expands the
-canonical 16:9 viewport, but the game UI and uncommon render passes can still
+game's 16:9 view, but some menus and effects can still
 use the original layout assumptions. If the display is clipped, misaligned,
 black, or otherwise incorrect, set `[Patches] Neptasm=0`, restart, and report
 the exact display configuration rather than layering multiple graphics
-options together. The release checklist has the recommended routes in
+options together. Suggested testing steps are in
 [TESTING.md](TESTING.md).
 
 ## Diagnostics and feedback
 
 Normal play does not create texture tracing or source captures. To help investigate a problem, set `[MipCache] Trace=1`, reproduce the issue once, then set it back to `0` and restart. `CaptureSources=1` saves unique input buffers and should remain off unless a maintainer explicitly asks for a local reproduction.
 
-Do not send game executables, PACs, extracted assets, cache records, or captured source buffers. Send a concise report with the patch version, the game SHA-256, Windows/GPU/driver details, enabled settings, scene/save/actions, expected and actual result, and any relevant text from `vii-patches.log` or the trace summary. See [TESTING.md](TESTING.md) for the release checklist.
+Do not send game executables, saves, PACs, extracted assets, cache records or
+captured source buffers. Report the patch version, game SHA-256, Windows/GPU/driver
+details, enabled settings and steps to reproduce the problem. Describe what you
+expected and what happened, with relevant text from `vii-patches.log` or a trace
+summary. See [TESTING.md](TESTING.md) for the reporting checklist.
 
 ## Updating, rollback, and uninstall
 
-To update an existing installation, close the game, replace the release ZIP's copy of `VII-Prepare-Game.exe`, then run it and choose **Prepare / Resume**. Do not overwrite `vii-patches.ini` with a fresh template: Prepare Game preserves explicit settings and makes a verified backup before changing the proxy or configuration. It accepts registered historical VII DLLs and refuses an unknown one.
+To update, close the game and extract the newer release to a separate folder.
+Run its `VII-Prepare-Game.exe`, check the displayed settings and choose
+**Install / Update**. Use **Prepare / Resume** if assets need preparing again.
+Do not replace `vii-patches.ini` with a fresh template: Prepare Game keeps your
+settings and backs up files before updating them. It accepts known older VII
+patch DLLs and leaves unknown DLLs untouched.
 
 Before each managed install or update, the tool creates a unique transaction folder under `vii-prepare-backups`. `snapshot.ini` records exact file targets and before/after hashes; `before-*` and `after-*` files retain the corresponding bytes. `committed.txt` identifies a completed transaction. State records the backup and cache paths; it does not authorize replacing a DLL or deleting a configuration file. Legacy timestamped backups retain their original format.
 
-**Rollback last patch update** restores the prior DLL from the last verified
+**Rollback last update** restores the prior DLL from the last verified
 installation snapshot. It restores the previous settings only when the current
 settings still match what that update installed. Edited or deleted settings are
 retained as they are. Rolling back a fresh install removes its verified DLL and

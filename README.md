@@ -1,50 +1,60 @@
 # VII QoL Patch
 
-Version **0.2.0**.
+Version **0.2.1**.
 
-A local Windows patch for **Megadimension Neptunia VII**. Prepare Game creates
-persistent texture caches and optional loose assets ahead of play. The patch
-also provides opt-in event, tutorial, battle, timing and graphics controls.
+A Windows patch for **Megadimension Neptunia VII**. Prepare Game builds a
+texture cache and unpacks game assets before you play. The patch reuses that
+data and offers optional story skipping, tutorial skipping, battle skipping,
+load timing and graphics settings.
 
 Supports `NeptuniaVII.exe` SHA-256
 `7ff2aad55e965add3b6fc45bd0ad2158769de014d6f619dc564a50c3e0fa42d9`.
-Original executables and PAC archives are preserved. Unsupported executables
-leave the patches inactive.
+The original game executable and PAC archives stay unchanged. The patch only
+activates for the supported executable.
 
 ## Installation and configuration
 
 1. Download the release ZIP and verify its `.zip.sha256` checksum.
 2. Extract it outside the game folder and close the game.
 3. Run **VII-Prepare-Game.exe**, select the installation, and choose **Prepare / Resume**.
-4. Wait for Ready, then launch normally through Steam.
+4. Wait for **Preparation complete**, then start the game through Steam.
+
+**Install / Update** installs the patch and saves settings without preparing
+assets. **Play** does the same before starting the game. Supported textures
+missing from the cache can be added during play; use **Prepare / Resume** to
+prepare assets ahead of time.
 
 Prepare Game refuses an unknown existing `dinput8.dll`; resolve mod conflicts
 before installing. A recognized existing patch can be updated through the same
 utility. Follow [Quick Start](docs/QUICK-START.md) and the
 [User Guide](docs/USER-GUIDE.md) for configuration, update, recovery and removal.
 
-The default profile enables MipCache, MotionCache, prepared LooseFiles and the
-read-only New Game bridge. Gameplay-changing controls and neptasm graphics
-controls remain off. The release includes the LiveSplit New Game ASL script.
+Texture caching, motion caching and unpacked assets are enabled by default.
+The included LiveSplit script can start your timer when you select New Game.
+Story, tutorial and battle skipping, early skip input, load timing and neptasm
+graphics settings are off until you enable them.
 
-The native x86 patch/preparer use a static C++ runtime. Gameplay requires the
-game's normal Direct3D/DirectX components, but no Python or compiler. Preparation
-can require roughly 35 GB of additional storage plus headroom for a full base/DLC
-installation; actual use varies. Existing explicit cache/asset paths are preserved.
+Use a Windows PC that already runs the supported game, including its usual
+DirectX components. You do not need Python, a compiler or a separate C++ runtime
+to use the release. Allow roughly 35 GB of extra free space for preparation,
+with room for the cache to grow. Space use varies with installed content and
+hardware. You can choose another drive for prepared data; updates keep your
+saved folder choices.
 
 ## Compatibility and limits
 
-Compatibility is limited to the supported executable and bounded routes.
-Unsupported texture recipes retain original loading. The historical extended-play
-verification issue remains unreproduced; short successful checks do not prove it
-resolved. Optional graphics controls have partial scene/UI coverage. See
+Testing covers selected scenes on the supported executable, rather than a full
+playthrough on every setup. Textures the cache cannot handle use the game's
+normal loader. An earlier verification problem during a long play session has
+not been reproduced or confirmed fixed. Optional graphics settings have only
+been checked in some scenes and menus. See
 [Troubleshooting and validation](docs/TESTING.md) and
 [Load timing](docs/LOAD-TIMING.md) for coverage and reporting details.
 
 ## Support and source builds
 
 Report problems through [GitHub Issues](https://github.com/Dabomstew/vii-qol-patch/issues), including
-the patch version, game identity and a sanitized diagnostic summary. Keep game
+the patch version, game executable hash and a short description of the problem. Keep game
 files, saves, extracted assets and private paths out of reports. Installation
 does not establish speedrun-category eligibility; check your category rules.
 
@@ -53,7 +63,5 @@ The patch source is [MIT licensed](LICENSE); see [Third-party notices](THIRD-PAR
 
 ## AI use
 
-AI coding tools assisted research, implementation, and documentation under human
-direction. Compatibility and correctness are assessed through the documented
-tests. Coverage remains limited; passing checks do not establish compatibility
-with every installation or correctness throughout an entire game.
+AI coding tools helped with research, code and documentation under human
+direction. The testing guide describes what has been checked and the known limits.

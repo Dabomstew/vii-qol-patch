@@ -102,7 +102,7 @@ Settings ReadSettings(const fs::path& selected) {
     result.cache = Normal(ResolveGamePath(game.wstring(), Ini(config, L"MipCache", L"DiskDirectory", CacheDefault), CacheDefault));
     result.assets = Normal(ResolveGamePath(game.wstring(), Ini(config, L"LooseFiles", L"Directory", AssetsDefault), AssetsDefault));
     for (size_t i = 0; i < Features.size(); ++i) result.enabled[i] = Enabled(config, Features[i]);
-    Need(HashPath(config) == result.configHash, "Settings changed while being read; reload the game folder");
+    Need(HashPath(config) == result.configHash, "Settings changed while being read. Choose Reload settings, or retry the command");
     return result;
 }
 namespace install {
@@ -122,7 +122,7 @@ void ValidateSettings(const fs::path& game, const Settings& settings) {
         Need(!Contains(settings.cache, assets) && !Contains(assets, settings.cache),
              "Texture cache and unpacked assets must use separate, non-overlapping folders");
     Need(HashPath(SafeBelow(game, game / Names[1])) == settings.configHash,
-         "Settings changed since they were loaded. Reload the game folder before applying choices");
+         "Settings changed since they were loaded. Choose Reload settings before applying changes, or retry the command with the current settings hash");
 }
 void StageSettings(const fs::path& game, const Settings& settings, const fs::path& staged) {
     const auto config = game / Names[1];

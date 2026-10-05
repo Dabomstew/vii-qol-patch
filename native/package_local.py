@@ -4,6 +4,8 @@ from ctypes import wintypes
 import re
 
 
+
+
 def embedded_resource(executable, number):
     kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel32.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]

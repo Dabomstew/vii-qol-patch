@@ -1,0 +1,11 @@
+{
+  "version": "1.0.2",
+  "source": "scaffold-game-preparer/assets/common",
+  "files": {
+    ".gitattributes": "0ac16869a4396d985143333561e05765db07ecb4270d25345fa8cd14411d9d05",
+    "preparer.cpp": "bce519e2e61db09e1786b43923e1fd45c768c111e6c50b6cff43e3cae1b2f332",
+    "preparer.hpp": "2101c61e37f3bacfa39034b5a1452cfa13ace7c1d96f51489ba3dbf1358fc63c",
+    "preparer_win32.cpp": "905ba5b6bc76c9cdf8df5d10a6735373bf014583384084c6fcef1d381c6adaaa",
+    "session_test.cpp": "23591b12368865b56db7480c20da79ddcd8bc476d8a20e9022b46a6359069363"
+  }
+}

@@ -16,6 +16,9 @@
   },
   "test_commands": [
     [
+      "native/test-preparer-session.cmd"
+    ],
+    [
       "native/test-battle-auto-skip.cmd"
     ],
     [

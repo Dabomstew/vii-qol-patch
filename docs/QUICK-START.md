@@ -1,12 +1,13 @@
 # Quick Start: Set Up VII Speedrun Patch
 
-This guide is for getting the patch ready to use. The normal setup can take a
-while because it prepares game files before you play.
+Prepare Game unpacks assets and builds a texture cache before you play, so the
+first setup can take a while.
 
 ## Before you start
 
-- Have roughly 35 GB of free space available on the drive where the game is
-  installed, plus some extra space if you can.
+- Allow roughly 35 GB of free space for prepared data, with room for the cache
+  to grow. You can choose another drive using **Cache folder...** and
+  **Unpacked assets...**.
 - Close Megadimension Neptunia VII if it is open.
 - Leave the game installed where Steam put it. You do not need to move or edit
   game files yourself.
@@ -38,12 +39,17 @@ without repeating the full preparation. Gameplay options are off by default.
 Choose **Cancel**. You can run **VII-Prepare-Game.exe** later and choose
 **Prepare / Resume** to carry on from the completed work.
 
-## If something gets in the way
+## Troubleshooting
 
-- If you do not have enough free space, ask the person who sent you the patch
-  for help.
-- If VII Prepare Game reports a conflicting file or another mod, do not replace
-  any files by hand. Ask the person who sent you the patch for help.
+- If you run out of space, free some space on the selected drive and choose
+  **Prepare / Resume** again. See the user guide before changing data folders;
+  choosing a new folder does not move completed work.
+- If VII Prepare Game reports a conflicting `dinput8.dll`, it may belong to
+  another mod. Resolve that conflict before installing; do not overwrite it
+  by hand.
+
+For help, [report the problem on GitHub](https://github.com/Dabomstew/vii-qol-patch/issues)
+with the error message and steps that led to it.
 
 For updates, troubleshooting, or advanced options, see the
 [full user guide](USER-GUIDE.md).

@@ -43,7 +43,11 @@ bool Apply(Session& session, const Settings& settings) {
 fs::path GameFolder(const fs::path& selected){
     auto game=fs::absolute(selected).lexically_normal();if(game.filename().empty())game=game.parent_path();if(!_wcsicmp(game.filename().c_str(),L"CONTENTS"))game=game.parent_path();
     if(!fs::exists(Native(game/L"NeptuniaVII.exe"))||!fs::is_directory(Native(game/L"CONTENTS")))throw std::runtime_error("Select the installed Neptunia VII folder or its CONTENTS folder");
-    SafeBelow(game,game);return Normal(fs::canonical(Native(game)));
+    SafeBelow(game,game);
+    game=Normal(fs::canonical(Native(game)));
+    Need(HashPath(SafeBelow(game,game/L"NeptuniaVII.exe")) == Baseline,
+         "This game executable is not the supported Neptunia VII build");
+    return game;
 }
 fs::path CacheFolder(const fs::path& game) { return ReadSettings(game).cache; }
 fs::path DetectGame(){

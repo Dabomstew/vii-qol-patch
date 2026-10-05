@@ -1,16 +1,22 @@
 # Experimental load timing and FPS control
 
-This feature covers **battle-entry character resource waits, initial dungeon
-map-resource waits before player control, ADV script preparation waits,
-normal world-map resource waits on save loading and battle return, and required
-synchronous dimension-title movie setup, and load-list metadata calls**. It does not yet provide whole-game
-time without loads. Ordinary dungeon enemy
-spawning, ADV playback, battle cameras and other unqualified
-phases are not selected by this detector.
+This experimental feature measures selected loading waits and lets a timer
+subtract them from elapsed time. It currently covers:
+
+- Character loading when entering battle.
+- Initial dungeon map loading before player control.
+- Story-event (ADV) script preparation.
+- World-map loading after loading a save or returning from battle.
+- Required synchronous movie setup for dimension titles.
+- File metadata calls while building the save-loading list.
+
+It does not yet measure all loading across the game. Enemy spawning during
+normal dungeon play, story playback, battle cameras and other untested phases
+remain included in elapsed time.
 
 Enable observation with `[Patches] LoadTiming=1`. Also set
 `[LoadTiming] FPSUnlock=1` to temporarily remove the frame limiter during the
-same detected waits. Both settings default to zero and require a restart.
+same detected waits. Both settings are off by default and require a restart.
 Keep `[Neptasm] FPSUnlock=0` to retain capped gameplay. If the global Neptasm
 unlock is explicitly enabled, it keeps its global effect; this feature still
 measures loads but does not attempt to override or undo that choice.

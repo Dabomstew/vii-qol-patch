@@ -4,3 +4,4 @@ scripts/package-release.ps1 -text
 scripts/find-msvc.ps1 -text
 scripts/init-msvc.cmd -text
 scripts/release_build.py -text
+/native/preparer-components.json -text

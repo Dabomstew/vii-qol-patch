@@ -226,7 +226,7 @@ std::set<std::string> KnownProxies() {
 void ValidateProxy(const fs::path& path) {
     const auto actual = HashPath(path);
     Need(actual.empty() || KnownProxies().count(actual),
-         "Unrecognized dinput8.dll; it has been left untouched. Use a newer VII preparer for a newer patch, or resolve the other proxy before installing.");
+         "Unrecognized dinput8.dll; it has been left untouched. If it belongs to a newer VII patch, use that release's preparer. Otherwise, resolve the mod conflict before installing.");
 }
 void Failpoint(const char* point) {
 #ifdef VII_PREPARE_TEST

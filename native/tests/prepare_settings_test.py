@@ -16,6 +16,19 @@ class Settings(Transactions):
     def backups(self):
         return sorted(p.name for p in (self.game / 'vii-prepare-backups').glob('*'))
 
+    def test_selection_refuses_unsupported_executable_without_writes(self):
+        exe = self.game / 'NeptuniaVII.exe'
+        baseline = exe.read_bytes()
+        try:
+            exe.write_bytes(b'unsupported executable')
+            before = {p.relative_to(self.game): p.read_bytes()
+                      for p in self.game.rglob('*') if p.is_file()}
+            self.assertIn('not the supported', self.run_app('--settings', success=False))
+            self.assertEqual({p.relative_to(self.game): p.read_bytes()
+                              for p in self.game.rglob('*') if p.is_file()}, before)
+        finally:
+            exe.write_bytes(baseline)
+
     def test_template_and_runtime_defaults(self):
         entries = re.findall(r'\{L"(\w+)", L"[^"]+", (true|false), (true|false)\}',
                              (ROOT / 'native/include/prepare_settings.hpp').read_text())
