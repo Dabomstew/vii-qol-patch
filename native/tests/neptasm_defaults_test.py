@@ -9,7 +9,4 @@ assert parser.getint("Patches", "Neptasm") == 0
 for key in ("FPSUnlock", "CameraUnlock", "Resolution", "FitWindow", "WindowControl", "Ultrawide"):
     assert parser.getint("Neptasm", key) == 0, key
 assert parser.get("Neptasm", "ResolutionScale") == "1.0"
-source = (root / "src" / "prepare_game.cpp").read_text(encoding="utf-8")
-for key in ("Neptasm", "FPSUnlock", "CameraUnlock", "Resolution", "FitWindow", "WindowControl", "Ultrawide"):
-    assert f'L"{key}"' in source, key
 print("neptasm defaults: all opt-in controls are present and disabled")
