@@ -118,7 +118,7 @@ END
     environment = os.environ.copy()
     if visual_studio: environment['PATCH_VISUAL_STUDIO'] = visual_studio
     # Resource compilation has no path interpolation supplied by callers.
-    subprocess.run([environment['ComSpec'], '/d', '/c', 'call scripts\\init-msvc.cmd x86 && rc /nologo /fo build\\generated\\proxy-version.res build\\generated\\proxy-version.rc'], cwd=ROOT, env=environment, check=True)
+    subprocess.run([os.environ['ComSpec'], '/d', '/c', 'call scripts\\init-msvc.cmd x86 && rc /nologo /fo build\\generated\\proxy-version.res build\\generated\\proxy-version.rc'], cwd=ROOT, env=environment, check=True)
     proxy_command = configuration['proxy_command'][:]
     if tests and configuration.get('proxy_tests'): proxy_command += configuration['proxy_tests']
     if visual_studio and proxy_command[0] == 'powershell.exe': proxy_command += ['-VisualStudioDirectory', visual_studio]
