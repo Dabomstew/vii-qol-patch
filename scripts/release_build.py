@@ -76,6 +76,7 @@ def resource(path, number):
 def execute(command, environment):
     command = [sys.executable if value == '{python}' else value for value in command]
     if command[0].endswith('.cmd'):
+        command[0] = command[0].replace('/', '\\')
         command = [os.environ['ComSpec'], '/d', '/c', *command]
     print('Running: ' + ' '.join(command), flush=True)
     subprocess.run(command, cwd=ROOT, env=environment, check=True)
