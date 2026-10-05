@@ -1,0 +1,14 @@
+build/
+dist/
+reports/
+.local/
+**/__pycache__/
+*.py[cod]
+*.exe
+*.dll
+*.obj
+*.pdb
+*.lib
+*.exp
+*.res
+*.log

@@ -1,0 +1,4 @@
+101 RCDATA "build/native-build/dinput8.dll"
+102 RCDATA "build/generated/proxy-hashes.txt"
+#include "build/generated/version.rc"
+103 RCDATA "native/vii-patches.ini"

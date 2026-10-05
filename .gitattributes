@@ -1,0 +1,6 @@
+* text eol=lf
+scripts/build-release.ps1 -text
+scripts/package-release.ps1 -text
+scripts/find-msvc.ps1 -text
+scripts/init-msvc.cmd -text
+scripts/release_build.py -text

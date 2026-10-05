@@ -1,0 +1,139 @@
+{
+  "project": "vii-speedrun-patch",
+  "proxy": "build/native-build/dinput8.dll",
+  "preparer": "build/prepare-build/VII-Prepare-Game.exe",
+  "configuration": "native/vii-patches.ini",
+  "proxy_command": [
+    "native/build.cmd"
+  ],
+  "prepare_command": [
+    "native/build-prepare-game.cmd",
+    "--existing-proxy"
+  ],
+  "architectures": {
+    "proxy": "x86",
+    "preparer": "x86"
+  },
+  "test_commands": [
+    [
+      "native/test-battle-auto-skip.cmd"
+    ],
+    [
+      "native/test-code-calls.cmd"
+    ],
+    [
+      "native/test-event-auto-skip.cmd"
+    ],
+    [
+      "native/test-event-skip-buffer.cmd"
+    ],
+    [
+      "native/test-game-path.cmd"
+    ],
+    [
+      "native/test-load-timing.cmd"
+    ],
+    [
+      "native/test-loose-files.cmd"
+    ],
+    [
+      "native/test-modal-key-queue.cmd"
+    ],
+    [
+      "native/test-motion-adapter.cmd"
+    ],
+    [
+      "native/test-motion.cmd"
+    ],
+    [
+      "native/test-pac-archive.cmd"
+    ],
+    [
+      "native/test-pac-unpack.cmd"
+    ],
+    [
+      "native/test-proxy-registry.cmd"
+    ],
+    [
+      "native/test-texture-disk.cmd"
+    ],
+    [
+      "native/test-texture-sources.cmd"
+    ],
+    [
+      "native/test-texture-writer.cmd"
+    ],
+    [
+      "native/test-textures.cmd"
+    ],
+    [
+      "native/test-tutorial-suppression.cmd"
+    ],
+    [
+      "{python}",
+      "native/tests/neptasm_defaults_test.py"
+    ],
+    [
+      "{python}",
+      "native/tests/neptasm_aspect_path_test.py"
+    ]
+  ],
+  "package_files": [
+    {
+      "source": "build/native-build/dinput8.dll",
+      "target": "dinput8.dll"
+    },
+    {
+      "source": "build/prepare-build/VII-Prepare-Game.exe",
+      "target": "VII-Prepare-Game.exe"
+    },
+    {
+      "source": "native/vii-patches.ini",
+      "target": "vii-patches.ini"
+    },
+    {
+      "source": "native/vii-new-game.asl",
+      "target": "vii-new-game.asl"
+    },
+    {
+      "source": "README.md",
+      "target": "README.md"
+    },
+    {
+      "source": "LICENSE",
+      "target": "LICENSE"
+    },
+    {
+      "source": "THIRD-PARTY-NOTICES.md",
+      "target": "THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "source": "docs/BUILD.md",
+      "target": "docs/BUILD.md"
+    },
+    {
+      "source": "docs/QUICK-START.md",
+      "target": "docs/QUICK-START.md"
+    },
+    {
+      "source": "docs/USER-GUIDE.md",
+      "target": "docs/USER-GUIDE.md"
+    },
+    {
+      "source": "docs/TESTING.md",
+      "target": "docs/TESTING.md"
+    },
+    {
+      "source": "docs/LOAD-TIMING.md",
+      "target": "docs/LOAD-TIMING.md"
+    }
+  ],
+  "machines": {
+    "dinput8.dll": 332,
+    "VII-Prepare-Game.exe": 332
+  },
+  "artifacts": [
+    "build/native-build/dinput8.dll",
+    "build/prepare-build/VII-Prepare-Game.exe"
+  ]
+}
