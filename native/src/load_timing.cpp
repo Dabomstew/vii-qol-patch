@@ -32,7 +32,9 @@ using ScriptBusy = uint32_t(__fastcall*)(void*);
 TaskData originalAdvData = nullptr;
 ScriptBusy originalScriptBusy = nullptr;
 SetupPredicate originalAdvCancel = nullptr;
-struct AdvScope { void* task = nullptr; void* object = nullptr; uint32_t scene = 0, calls = 0; bool waiting = false; };
+using QueueBusy = uint32_t(__cdecl*)(uint32_t);
+QueueBusy originalAdvQueue = nullptr;
+struct AdvScope { void* task = nullptr; void* object = nullptr; uint32_t scene = 0, calls = 0, phase = 0; bool waiting = false; };
 thread_local AdvScope advScope;
 using ResourcePredicate = uint32_t(__cdecl*)(void*);
 using CharacterBusy = uint32_t(__cdecl*)(void*, uint32_t);
@@ -414,12 +416,14 @@ void ObserveAdv(void* task, void* object, bool waiting, bool readable = true) no
             sample.transitions, sample.reason, sample.completed, sample.opened, sample.lastQpc,
             static_cast<unsigned>(reinterpret_cast<uintptr_t>(task)));
 }
-bool ReadAdv(const AdvScope& scope, bool& eligible, uint32_t& scene) noexcept {
-    eligible = false; scene = 0;
+bool ReadAdv(const AdvScope& scope, bool& eligible, uint32_t& scene, uint32_t& phase) noexcept {
+    eligible = false; scene = phase = 0;
     __try {
         auto* p = static_cast<unsigned char*>(scope.object);
         if (!scope.task || !p || *reinterpret_cast<void**>(static_cast<unsigned char*>(scope.task)+0x24) != p ||
-            *reinterpret_cast<void**>(p) != scope.task || p[0x375c] != 3) return true;
+            *reinterpret_cast<void**>(p) != scope.task) return true;
+        phase = p[0x375c];
+        if (phase != 3 && phase != 4) return true;
         scene = *reinterpret_cast<uint32_t*>(p+0x10); eligible = true;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -435,7 +439,7 @@ void* __fastcall AdvDataHook(void* manager, void*, void* task) {
     if (active) {
         advScope.task = task; advScope.object = result;
         bool eligible = false;
-        if (!ReadAdv(advScope, eligible, advScope.scene)) ObserveAdv(task, nullptr, false, false);
+        if (!ReadAdv(advScope, eligible, advScope.scene, advScope.phase)) ObserveAdv(task, nullptr, false, false);
         if (!eligible) advScope = {};
     }
     return result;
@@ -444,7 +448,15 @@ uint32_t __fastcall AdvScriptHook(void* controller) {
     const auto result = originalScriptBusy(controller);
     if (enabled.load(std::memory_order_acquire) && advScope.task) {
         ++advScope.calls;
-        advScope.waiting = (result & 0xff) == 1;
+        advScope.waiting = advScope.phase == 3 && (result & 0xff) == 1;
+    }
+    return result;
+}
+uint32_t __cdecl AdvQueueHook(uint32_t category) {
+    const auto result = originalAdvQueue(category);
+    if (enabled.load(std::memory_order_acquire) && advScope.task) {
+        ++advScope.calls;
+        advScope.waiting = advScope.phase == 4 && category == 3 && (result & 0xff) == 1;
     }
     return result;
 }
@@ -452,10 +464,10 @@ uint32_t __cdecl AdvCancelHook() {
     const auto result = originalAdvCancel();
     const auto scope = advScope; advScope = {};
     if (enabled.load(std::memory_order_acquire) && scope.task) {
-        bool eligible = false; uint32_t scene = 0;
-        const bool readable = (result & 0xff) != 0 || ReadAdv(scope, eligible, scene);
+        bool eligible = false; uint32_t scene = 0, phase = 0;
+        const bool readable = (result & 0xff) != 0 || ReadAdv(scope, eligible, scene, phase);
         ObserveAdv(scope.task, scope.object, (result & 0xff) == 0 && readable && eligible &&
-            scene == scope.scene && scope.calls == 1 && scope.waiting, readable);
+            scene == scope.scene && phase == scope.phase && scope.calls == 1 && scope.waiting, readable);
     }
     return result;
 }
@@ -507,7 +519,7 @@ void NotifyLoadTimingNewGame(uint32_t sequence) noexcept {
 
 bool InstallLoadTiming(const Context& context) {
     const auto base = reinterpret_cast<uintptr_t>(context.game);
-    requestedFps = Option(context, L"LoadTiming", L"FPSUnlock", 0) != 0;
+    requestedFps = Option(context, L"Patches", L"UnlockFPSDuringLoads", 0) != 0;
     globalFps = Option(context, L"Patches", L"Neptasm", 0) != 0 && Option(context, L"Neptasm", L"FPSUnlock", 0) != 0;
     trace = Option(context, L"LoadTiming", L"Trace", 0) != 0;
     auto* callback = reinterpret_cast<unsigned char*>(base + 0x258e40);
@@ -524,6 +536,11 @@ bool InstallLoadTiming(const Context& context) {
         {reinterpret_cast<unsigned char*>(base+0x8e5af), {0xe8,0xcc,0x94,0xff,0xff,0x8b,0xf0,0x8b}, reinterpret_cast<void*>(AdvDataHook)},
         {reinterpret_cast<unsigned char*>(base+0x8e698), {0xe8,0x93,0x14,0x00,0x00,0x84,0xc0,0x0f}, reinterpret_cast<void*>(AdvScriptHook)},
         {reinterpret_cast<unsigned char*>(base+0x8e85f), {0xe8,0x5c,0x92,0x0a,0x00,0x84,0xc0,0x75}, reinterpret_cast<void*>(AdvCancelHook)}};
+    const CallSite advQueueSite{reinterpret_cast<unsigned char*>(base+0x8e6ee),
+        {0xe8,0x9d,0xe1,0x30,0x00,0x83,0xc4,0x04},reinterpret_cast<void*>(AdvQueueHook)};
+    if (std::memcmp(advQueueSite.address,advQueueSite.expected.data(),8)) {
+        timing.Fail(LoadFault::Install,0); Publish(); Log("LoadTiming ADV queue signature unavailable; disabled"); return false;
+    }
     const CallSite worldSites[]{
         {reinterpret_cast<unsigned char*>(base+0x2bc385), {0xe8,0xf6,0xb6,0xdc,0xff,0x8b,0xf0,0x8b}, reinterpret_cast<void*>(WorldDataHook)},
         {reinterpret_cast<unsigned char*>(base+0x2b32cd), {0xe8,0x0e,0x41,0xf9,0xff,0x84,0xc0,0x0f}, reinterpret_cast<void*>(WorldReadyHook)},
@@ -573,6 +590,7 @@ bool InstallLoadTiming(const Context& context) {
     originalAdvData = reinterpret_cast<TaskData>(base+0x87a80);
     originalScriptBusy = reinterpret_cast<ScriptBusy>(base+0x8fb30);
     originalAdvCancel = reinterpret_cast<SetupPredicate>(base+0x137ac0);
+    originalAdvQueue = reinterpret_cast<QueueBusy>(base+0x39c890);
     originalWorldData = reinterpret_cast<TaskData>(base+0x87a80);
     originalWorldReady = reinterpret_cast<SetupPredicate>(base+0x2473e0);
     originalWorldMap = reinterpret_cast<ResourcePredicate>(base+0x2a9cb0);
@@ -608,6 +626,10 @@ bool InstallLoadTiming(const Context& context) {
     for (const auto& site : advSites) {
         const auto report = ReplaceCall(site);
         if (!Good(report)) { timing.Fail(LoadFault::Install,0); Publish(); Log("LoadTiming ADV=%s; disabled",CallStatusName(report.status)); return false; }
+    }
+    {
+        const auto report = ReplaceCall(advQueueSite);
+        if (!Good(report)) { timing.Fail(LoadFault::Install,0); Publish(); Log("LoadTiming ADV queue=%s; disabled",CallStatusName(report.status)); return false; }
     }
     for (const auto& site : worldSites) {
         const auto report = ReplaceCall(site);
@@ -651,6 +673,8 @@ uint32_t LoadSetupTest() { return SetupHook(); }
 void SetAdvTimingTest(TaskData data, ScriptBusy busy, SetupPredicate cancel) {
     originalAdvData = data; originalScriptBusy = busy; originalAdvCancel = cancel;
 }
+void SetAdvQueueTimingTest(QueueBusy queue) { originalAdvQueue = queue; }
+uint32_t LoadAdvQueueTest(uint32_t category) { return AdvQueueHook(category); }
 void* LoadAdvDataTest(void* manager, void* task) { return AdvDataHook(manager,nullptr,task); }
 uint32_t LoadAdvScriptTest(void* controller) { return AdvScriptHook(controller); }
 uint32_t LoadAdvCancelTest() { return AdvCancelHook(); }

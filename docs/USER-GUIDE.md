@@ -90,9 +90,10 @@ settings. This does not scan textures, extract archives, or launch the game.
 Repeating an unchanged update keeps the previous update backup.
 Use **Prepare / Resume** when you want to extract assets and prebuild textures.
 
-The window loads the three loading options and four optional gameplay choices
-from the existing INI. Loading improvements default on; gameplay changes default
-off. Explicit existing choices, including disabled loading options, are retained.
+The window loads the prepared loading options, **Unlock FPS during loads**, and
+five optional gameplay choices from the existing INI. Prepared loading
+improvements default on; FPS unlock and gameplay changes default off. Explicit
+existing choices, including disabled loading options, are retained.
 **Reload settings** reads the current file. If you have unsaved changes, choose
 **Discard changes** to reload or **Stay** to keep editing. The same prompt appears
 when changing the game folder, closing or starting maintenance. If the INI changes while
@@ -113,7 +114,7 @@ The CLI supports the same settings and maintenance backend:
 ```
 
 `--enable-only` remains an alias for `--install`. `--output CACHE` and
-`--assets FOLDER` choose locations; `--set Key=0|1` accepts the seven displayed
+`--assets FOLDER` choose locations; `--set Key=0|1` accepts the nine displayed
 feature keys. `--settings` prints saved paths, flags and the INI SHA-256 as JSON.
 Scripts can pass that hash to `--if-config-hash HASH` when applying changes to
 avoid overwriting settings changed since they were read (an empty hash means no INI existed). `--gui --source GAME`
@@ -125,6 +126,11 @@ still prepares and resumes.
 `vii-patches.ini` is beside `NeptuniaVII.exe`. Close and restart the game after every edit. Relative paths are resolved from the game folder; absolute Windows paths are also supported.
 
 Missing keys are filled from the bundled template. Advanced values, unknown keys and existing comments are retained through the Windows INI API. Windows ANSI and UTF-16 LE profiles are supported; non-ASCII selected paths may convert ANSI to UTF-16 LE. UTF-8 BOM and UTF-16 BE files are refused before installation; save them as UTF-16 LE and reload.
+
+Load timing is always active for supported waits, including blocked story-event
+resource queues. Prepare Game moves saved load-only FPS and dungeon preview
+choices to `UnlockFPSDuringLoads` and `SuppressDungeonPreviews` and removes the
+old timing and queue toggles. Explicit values under the new names take priority.
 
 The release defaults are:
 
@@ -141,8 +147,9 @@ The release defaults are:
 | `[LooseFiles] Directory` | `vii-speedrun-patch\unpacked` | Base extraction location; DLC is the derived `.dlc` folder. |
 | `[LooseFiles] Verify` | `0` | Checks expected size; `1` additionally hashes every opened loose file and is slower. |
 | `[Patches] NewGameDetector` | `1` | Lets `vii-new-game.asl` detect New Game and start the LiveSplit timer without writing game memory. |
-| `[Patches] LoadTiming` | `0` | Experimental read-only load timing bridge; covers battle-entry character, initial dungeon map, pre-control ADV script, normal world-map resource waits, synchronous title movie setup, and load-list metadata calls. See [load timing](LOAD-TIMING.md). |
-| `[LoadTiming] FPSUnlock` / `Trace` | `0` / `0` | Temporarily uncap the same detected waits, or log their boundaries. Requires LoadTiming. Keep global Neptasm FPSUnlock off for capped gameplay. |
+| `[Patches] UnlockFPSDuringLoads` | `0` | Removes the frame cap during detected loads, including blocked story-event resource queues. Available in Prepare Game. Keep global Neptasm FPSUnlock off for capped gameplay. |
+| `[LoadTiming] Trace` | `0` | Logs boundaries from the always-active load timing bridge. See [load timing](LOAD-TIMING.md) for partial coverage. |
+| `[Patches] SuppressDungeonPreviews` | `0` | Hides optional dungeon preview movies and images in the world-map information window. Available in Prepare Game. |
 | `[Patches] AutoSkipEvents` | `0` | Automatically skips eligible ADV events when enabled. |
 | `[Patches] BattleAutoSkip` | `0` | Enables battle animation/results skipping when enabled. |
 | `[Patches] EventSkipBuffer` | `0` | Buffers an early event skip input and preserves observed keyboard action order in its confirmation dialog when enabled. |

@@ -18,11 +18,11 @@ void Print(const std::string& text){DWORD written=0;auto message=text+"\n";Write
 preparer::View View(const fs::path& game, const prepare::Settings& settings) {
     preparer::View v; v.game = game; v.executable = game / L"NeptuniaVII.exe";
     v.gameName = L"Megadimension Neptunia VII";
-    v.note = L"Your saved choices are loaded; advanced INI settings are kept. Loading improvements are on and gameplay options are off for a new installation.";
+    v.note = L"Your saved choices are loaded; advanced INI settings are kept. Prepared loading improvements are on for a new installation. FPS unlock and gameplay options are off.";
     v.snapshot = std::make_shared<prepare::Settings>(settings);
     v.paths = {{"cache", L"Cache folder...", settings.cache}, {"assets", L"Unpacked assets...", settings.assets}};
     for (size_t i = 0; i < prepare::Features.size(); ++i)
-        v.features.push_back({Utf8(prepare::Features[i].key), prepare::Features[i].label, i < 3 ? 0u : 1u, settings.enabled[i]});
+        v.features.push_back({Utf8(prepare::Features[i].key), prepare::Features[i].label, i < 4 ? 0u : 1u, settings.enabled[i]});
     return v;
 }
 class Adapter final : public preparer::Adapter {

@@ -44,7 +44,7 @@ def main():
     for setting in ('MipCache=1', 'MotionCache=1', 'LooseFiles=1',
                     'AutoSkipEvents=0', 'EventSkipBuffer=0',
                     'SuppressTutorials=0', 'BattleAutoSkip=0',
-                    'NewGameDetector=1', 'LoadTiming=0', 'Neptasm=0', 'FPSUnlock=0', 'CameraUnlock=0',
+                    'NewGameDetector=1', 'UnlockFPSDuringLoads=0', 'SuppressDungeonPreviews=0', 'Neptasm=0', 'FPSUnlock=0', 'CameraUnlock=0',
                     'Resolution=0', 'ResolutionScale=1.0', 'FitWindow=0',
                     'WindowControl=0', 'WindowWidth=1920',
                     'WindowHeight=1080', 'Ultrawide=0',
@@ -55,7 +55,10 @@ def main():
     assert sha(game / 'dinput8.dll') == sha(ROOT / 'build/native-build/dinput8.dll')
     parsed = configparser.ConfigParser()
     parsed.read_string(fresh)
-    assert parsed.getint('LoadTiming', 'FPSUnlock') == 0
+    assert parsed.getint('Patches', 'UnlockFPSDuringLoads') == 0
+    assert not parsed.has_option('Patches', 'LoadTiming')
+    assert not parsed.has_option('LoadTiming', 'FPSUnlock')
+    assert not parsed.has_option('LoadTiming', 'ADVQueueWaits')
     assert parsed.getint('LoadTiming', 'Trace') == 0
     assert sha(game / 'NeptuniaVII.exe') == EXPECTED
 
@@ -79,9 +82,11 @@ def main():
                       encoding='utf-16')
     run(root, '--source', game, '--enable-only')
     preserved = config.read_text(encoding='utf-16')
+    parsed = configparser.ConfigParser()
     parsed.read_string(preserved)
-    assert parsed.getint('Patches', 'LoadTiming') == 1
-    assert parsed.getint('LoadTiming', 'FPSUnlock') == 1
+    assert not parsed.has_option('Patches', 'LoadTiming')
+    assert not parsed.has_option('LoadTiming', 'FPSUnlock')
+    assert parsed.getint('Patches', 'UnlockFPSDuringLoads') == 1
     assert parsed.getint('LoadTiming', 'Trace') == 1
     for setting in (f'DiskDirectory={custom}', 'Directory=kept-relative',
                     'AutoSkipEvents=1', 'BattleAutoSkip=1', 'Verify=1',

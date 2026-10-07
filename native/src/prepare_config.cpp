@@ -46,7 +46,12 @@ bool Has(const fs::path& file, const wchar_t* section, const wchar_t* key) {
     return Ini(file, section, key, L"\x01") != L"\x01";
 }
 bool Enabled(const fs::path& file, const Feature& feature) {
-    return GetPrivateProfileIntW(L"Patches", feature.key, feature.prepareDefault ? 1 : 0, Native(file).c_str()) != 0;
+    int fallback = feature.prepareDefault ? 1 : 0;
+    if (std::wstring(feature.key) == L"UnlockFPSDuringLoads")
+        fallback = GetPrivateProfileIntW(L"LoadTiming", L"FPSUnlock", fallback, Native(file).c_str());
+    if (std::wstring(feature.key) == L"SuppressDungeonPreviews")
+        fallback = GetPrivateProfileIntW(L"Patches", L"SuppressDungeonPreview", fallback, Native(file).c_str());
+    return GetPrivateProfileIntW(L"Patches", feature.key, fallback, Native(file).c_str()) != 0;
 }
 bool SameLocation(const fs::path& a, const fs::path& b) {
     return Same(Normal(fs::weakly_canonical(Native(a))), Normal(fs::weakly_canonical(Native(b))));
@@ -134,6 +139,17 @@ void StageSettings(const fs::path& game, const Settings& settings, const fs::pat
     if (!settings.configHash.empty()) Copy(config, staged);
     else { const auto bytes = Resource(103); Write(staged, bytes.data(), bytes.size()); }
     EnsureUnicode(staged, cacheText + assetText + game.wstring());
+    // Canonical values preserve legacy selections and explicit new overrides.
+    for (size_t i = 0; i < Features.size(); ++i)
+        if (!Has(staged, L"Patches", Features[i].key))
+            Set(staged, L"Patches", Features[i].key, settings.enabled[i] ? L"1" : L"0");
+    for (const auto& obsolete : {std::make_pair(L"Patches", L"LoadTiming"),
+                                 std::make_pair(L"LoadTiming", L"FPSUnlock"),
+                                 std::make_pair(L"LoadTiming", L"ADVQueueWaits"),
+                                 std::make_pair(L"Patches", L"SuppressDungeonPreview")})
+        if (Has(staged, obsolete.first, obsolete.second))
+            Need(WritePrivateProfileStringW(obsolete.first, obsolete.second, nullptr, Native(staged).c_str()) != 0,
+                 "Cannot remove obsolete setting");
     for (const auto& d : defaults)
         if (!Has(staged, d.section.c_str(), d.key.c_str())) Set(staged, d.section.c_str(), d.key.c_str(), d.value);
     for (size_t i = 0; i < Features.size(); ++i)

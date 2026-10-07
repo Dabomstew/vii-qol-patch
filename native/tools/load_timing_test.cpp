@@ -219,6 +219,53 @@ static void AdvTests() {
     CHECK(ReadLoadTimingTest().status==static_cast<uint32_t>(LoadStatus::Fault));
     LoadClockTest(clockFields); CHECK(seenInterval==16666);
 }
+static uint32_t advQueueResult=0xcafe0001,advQueueCalls=0;
+static uint32_t __cdecl OriginalAdvQueue(uint32_t category) {
+    CHECK(category<=3); ++advQueueCalls; return advQueueResult;
+}
+static void AdvQueuePredicate(uint32_t category=3) { CHECK(LoadAdvQueueTest(category)==advQueueResult); }
+static void AdvQueueTests() {
+    ResetLoadTimingTest(OriginalBattle,OriginalClock,true,false);
+    SetAdvTimingTest(reinterpret_cast<void*(__thiscall*)(void*,void*)>(OriginalAdvData),OriginalAdvBusy,OriginalAdvCancel);
+    SetAdvQueueTimingTest(OriginalAdvQueue);
+    advTask[9]=reinterpret_cast<uintptr_t>(advObject); advObject[0]=reinterpret_cast<uintptr_t>(advTask);
+    advObject[4]=3090; advObject[0x375c/4]=4; advCancel=0xabcd0000;
+    const auto calls=advQueueCalls;
+    AdvBegin(); AdvQueuePredicate(); CHECK(ReadLoadTimingTest().reason==0); AdvEnd();
+    CHECK(ReadLoadTimingTest().reason==4 && advQueueCalls==calls+1);
+    LoadClockTest(clockFields); CHECK(seenInterval==0 && clockFields[8]==16666);
+    AdvBegin(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    AdvBegin(); AdvQueuePredicate(2); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advQueueResult=0xcafe0000; AdvBegin(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advQueueResult=0xcafe0001;
+    for(auto phase : {0u,1u,2u,3u,5u,6u,7u,8u}) {
+        advObject[0x375c/4]=phase; AdvBegin(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    }
+    advObject[0x375c/4]=4;
+    AdvBegin(); AdvQueuePredicate(); advObject[0x375c/4]=7; AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advObject[0x375c/4]=4;
+    AdvBegin(); AdvQueuePredicate(); ++advObject[4]; AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    AdvBegin(); AdvQueuePredicate(); advTask[9]=reinterpret_cast<uintptr_t>(advOther); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advTask[9]=reinterpret_cast<uintptr_t>(advObject);
+    AdvBegin(); AdvQueuePredicate(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    AdvBegin(); AdvQueuePredicate(); AdvPredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    AdvBegin(); AdvQueuePredicate(); advCancel=0xabcd0001; AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advCancel=0xabcd0000;
+    AdvBegin(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==4);
+    AdvBegin(); CHECK(ReadLoadTimingTest().reason==0); LoadClockTest(clockFields); CHECK(seenInterval==16666);
+    // Timing remains available with the FPS option off.
+    ResetLoadTimingTest(OriginalBattle,OriginalClock,false,false);
+    AdvBegin(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==4);
+    CHECK(ReadLoadTimingTest().fpsRequested==0);
+    LoadClockTest(clockFields); CHECK(seenInterval==16666 && clockFields[8]==16666);
+    CHECK(ReadLoadTimingTest().openSinceQpc>0 && ReadLoadTimingTest().fpsApplications==0);
+    advQueueResult=0xcafe0000;
+    AdvBegin(); AdvQueuePredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==0);
+    advQueueResult=0xcafe0001;
+    // Phase-3 script proof remains independent.
+    CHECK(ReadLoadTimingTest().completedTicks>0);
+    advObject[0x375c/4]=3; AdvBegin(); AdvPredicate(); AdvEnd(); CHECK(ReadLoadTimingTest().reason==4);
+}
 static uint32_t worldTask[10]{}, worldObject[0x254/4]{}, worldGlobal[0x16208/4]{};
 static void* worldGlobalPointer=worldGlobal;
 static void* worldCallback=reinterpret_cast<void*>(0x12340000);
@@ -442,6 +489,6 @@ static void SaveTests() {
 }
 
 int main() {
-    CoreTests(); AdapterTests(); DungeonTests(); AdvTests(); WorldTests(); TitleTests(); SaveTests();
+    CoreTests(); AdapterTests(); DungeonTests(); AdvTests(); AdvQueueTests(); WorldTests(); TitleTests(); SaveTests();
     std::printf("PASS: %u checks; interval union, lifetime/focus/faults, sub-poll loads, x86 callback and clock restoration\n",checks);
 }

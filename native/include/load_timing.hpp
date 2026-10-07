@@ -44,6 +44,8 @@ void SetAdvTimingTest(void*(__thiscall*)(void*,void*), uint32_t(__fastcall*)(voi
 void* LoadAdvDataTest(void*, void*);
 uint32_t LoadAdvScriptTest(void*);
 uint32_t LoadAdvCancelTest();
+void SetAdvQueueTimingTest(uint32_t(__cdecl*)(uint32_t));
+uint32_t LoadAdvQueueTest(uint32_t);
 void SetWorldTimingTest(void*(__thiscall*)(void*,void*), uint32_t(__cdecl*)(),
                        uint32_t(__cdecl*)(void*), uint32_t(__cdecl*)(void*),
                        uint32_t(__cdecl*)(void*,uint32_t), void**, void*);

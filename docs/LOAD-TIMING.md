@@ -5,7 +5,7 @@ subtract them from elapsed time. It currently covers:
 
 - Character loading when entering battle.
 - Initial dungeon map loading before player control.
-- Story-event (ADV) script preparation.
+- Story-event (ADV) script preparation and blocked resource queues during setup.
 - World-map loading after loading a save or returning from battle.
 - Required synchronous movie setup for dimension titles.
 - File metadata calls while building the save-loading list.
@@ -14,12 +14,19 @@ It does not yet measure all loading across the game. Enemy spawning during
 normal dungeon play, story playback, battle cameras and other untested phases
 remain included in elapsed time.
 
-Enable observation with `[Patches] LoadTiming=1`. Also set
-`[LoadTiming] FPSUnlock=1` to temporarily remove the frame limiter during the
-same detected waits. Both settings are off by default and require a restart.
+Load timing is always active on the supported game. Set
+`[Patches] UnlockFPSDuringLoads=1` to temporarily remove the frame limiter during
+the same detected waits. This option is off by default and requires a restart.
+It is also available as **Unlock FPS during loads** in Prepare Game.
 Keep `[Neptasm] FPSUnlock=0` to retain capped gameplay. If the global Neptasm
 unlock is explicitly enabled, it keeps its global effect; this feature still
 measures loads but does not attempt to override or undo that choice.
+
+Detected resource-loading queue waits during story-event setup are included
+in load removal even when FPS uncapping is off. With **Unlock FPS during loads**
+enabled, these waits are also uncapped. This has been tested when
+entering Club ZECA from FILE59 with automatic event skipping; other routes
+still need testing.
 
 Asynchronous intervals require an original resource predicate to actually wait.
 The detector excludes neither the unconditional scheduling step into the wait
@@ -35,6 +42,10 @@ The ADV adapter requires the original script job to remain busy in phase 3,
 with the same task, scene and setup object and no cancellation. It closes at
 every callback entry and retains callback execution time. Later initialization
 fades, dialogue/skip input and MP resource work remain counted.
+The queue adapter requires one original category-3 busy poll and
+unchanged phase 4, task, data, scene and backpointer, with no cancellation.
+Ready ticks and transitions into phase 4 remain counted. It uses the existing
+ADV reason and ABI rather than adding a new coverage bit.
 The world adapter requires the normal controller's initial wait phase, its
 original readiness result, and an observed map/model or character resource-busy
 result. Null objects and other world callbacks remain counted. It closes at
@@ -82,7 +93,7 @@ stable process-local tree; no game heap pointer needs to be retained externally.
 | --- | --- | --- |
 | `0x00` | uint32 | Publication sequence |
 | `0x08` | uint32 | Status: 0 disabled, 1 ready with partial coverage, 2 fault |
-| `0x0C` | uint32 | Coverage mask: bit 0 = battle-entry character wait; bit 1 = initial dungeon map wait; bit 2 = ADV script wait; bit 3 = normal world-map resource wait; bit 4 = synchronous title movie setup; bit 5 = load-list metadata call |
+| `0x0C` | uint32 | Coverage mask: bit 0 = battle-entry character wait; bit 1 = initial dungeon map wait; bit 2 = ADV script or resource queue wait; bit 3 = normal world-map resource wait; bit 4 = synchronous title movie setup; bit 5 = load-list metadata call |
 | `0x10` | uint32 | Active reason mask; nonzero means a covered blocking load |
 | `0x14` | uint32 | Active owner count |
 | `0x18` | uint32 | Owner generation counter |

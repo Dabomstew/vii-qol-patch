@@ -48,6 +48,7 @@ def main():
         (0x2a31a6, 0x246360, 'e8 b5 31 fa ff 3c 01 75'),
         (0x8e5af, 0x87a80, 'e8 cc 94 ff ff 8b f0 8b'),
         (0x8e698, 0x8fb30, 'e8 93 14 00 00 84 c0 0f'),
+        (0x8e6ee, 0x39c890, 'e8 9d e1 30 00 83 c4 04'),
         (0x8e85f, 0x137ac0, 'e8 5c 92 0a 00 84 c0 75'),
         (0x2bc385, 0x87a80, 'e8 f6 b6 dc ff 8b f0 8b'),
         (0x2b32cd, 0x2473e0, 'e8 0e 41 f9 ff 84 c0 0f'),
@@ -70,6 +71,8 @@ def main():
     assert read(0x87a80,16)==bytes.fromhex('55 8b ec 8b 45 08 85 c0 74 07 8b 40 24 5d c2 04')
     # Busy branch skips to the final cancellation test; it cannot run input.
     assert read(0x8e69d,8)==bytes.fromhex('84 c0 0f 85 ba 01 00 00')
+    assert read(0x8e6ec,2)==bytes.fromhex('6a 03')
+    assert read(0x8e6f6,8)==bytes.fromhex('84 c0 0f 85 61 01 00 00')
     assert read(0x137ac0,12)==bytes.fromhex('33 c0 39 05 e0 5f b0 00 0f 95 c0 c3')
     # Title getter returns window+6C; setup uses one cdecl argument and AL result.
     assert read(0x3a3920,11)==bytes.fromhex('55 8b ec 8b 45 08 8b 40 6c 5d c3')

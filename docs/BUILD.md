@@ -24,7 +24,7 @@ tracked separately.
 Package from a clean production checkout after building with `-Tests`. The
 packager checks that binaries match the source, have the expected architecture
 and contain the correct embedded resources. It also checks package contents,
-links and checksums. The manifest identifies the production commit. Packages
+links and checksums. The preparer embeds its common-controls v6 activation manifest. Both build and package checks run the standalone EXE with --help from a fresh folder without sidecar files. A missing manifest or startup failure blocks the release. The manifest identifies the production commit. Packages
 exclude debug symbols, intermediate build records, test fixtures and game data.
 
 Tests requiring an original game executable run locally with explicit baseline

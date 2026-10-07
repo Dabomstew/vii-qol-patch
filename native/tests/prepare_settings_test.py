@@ -32,7 +32,7 @@ class Settings(Transactions):
     def test_template_and_runtime_defaults(self):
         entries = re.findall(r'\{L"(\w+)", L"[^"]+", (true|false), (true|false)\}',
                              (ROOT / 'native/include/prepare_settings.hpp').read_text())
-        self.assertEqual(len(entries), 7)
+        self.assertEqual(len(entries), 9)
         template = ini(ROOT / 'native/vii-patches.ini')
         runtime = (ROOT / 'native/src/core.cpp').read_text()
         self.run_app('--install')
@@ -42,6 +42,10 @@ class Settings(Transactions):
                 self.assertEqual(actual[section][key], value)
         for key, default, fallback in entries:
             self.assertEqual(template.getboolean('Patches', key), default == 'true')
+            if key == 'UnlockFPSDuringLoads':
+                self.assertIn('Option(context, L"Patches", L"UnlockFPSDuringLoads", 0)',
+                              (ROOT / 'native/src/load_timing.cpp').read_text())
+                continue
             match = re.search(r'\{L"' + key + r'",\w+(?:,([01]))?\}', runtime)
             self.assertIsNotNone(match)
             self.assertEqual(match[1] != '0', fallback == 'true')
@@ -61,6 +65,38 @@ class Settings(Transactions):
         self.assertTrue(self.query()['features']['BattleAutoSkip'])
         self.run_app('--install', '--set', 'BattleAutoSkip=0')
         self.assertFalse(self.query()['features']['BattleAutoSkip'])
+
+    def test_load_and_preview_settings_migrate_and_roundtrip(self):
+        config = self.game / 'vii-patches.ini'
+        config.write_text('[Patches]\nLoadTiming=0\nSuppressDungeonPreview=1\n'
+                          '[LoadTiming]\nFPSUnlock=1\nADVQueueWaits=0\nTrace=1\n', encoding='utf-16')
+        features = self.query()['features']
+        self.assertTrue(features['UnlockFPSDuringLoads'])
+        self.assertTrue(features['SuppressDungeonPreviews'])
+        self.run_app('--install')
+        parsed = ini(config)
+        for section, key in [('Patches', 'LoadTiming'), ('Patches', 'SuppressDungeonPreview'),
+                             ('LoadTiming', 'FPSUnlock'), ('LoadTiming', 'ADVQueueWaits')]:
+            self.assertFalse(parsed.has_option(section, key))
+        self.assertTrue(parsed.getboolean('LoadTiming', 'Trace'))
+        self.assertTrue(parsed.getboolean('Patches', 'UnlockFPSDuringLoads'))
+        self.assertTrue(parsed.getboolean('Patches', 'SuppressDungeonPreviews'))
+        self.run_app('--install', '--set', 'UnlockFPSDuringLoads=0', '--set', 'SuppressDungeonPreviews=0')
+        features = self.query()['features']
+        self.assertFalse(features['UnlockFPSDuringLoads'])
+        self.assertFalse(features['SuppressDungeonPreviews'])
+        before = config.read_bytes()
+        self.run_app('--install')
+        self.assertEqual(config.read_bytes(), before)
+
+    def test_canonical_settings_override_legacy_values(self):
+        config = self.game / 'vii-patches.ini'
+        config.write_text('[Patches]\nUnlockFPSDuringLoads=0\nSuppressDungeonPreviews=0\n'
+                          'SuppressDungeonPreview=1\n[LoadTiming]\nFPSUnlock=1\n', encoding='utf-16')
+        self.run_app('--install')
+        features = self.query()['features']
+        self.assertFalse(features['UnlockFPSDuringLoads'])
+        self.assertFalse(features['SuppressDungeonPreviews'])
 
     def test_noop_keeps_last_backup_and_bytes(self):
         self.run_app('--install')

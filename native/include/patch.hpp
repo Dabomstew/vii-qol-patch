@@ -23,6 +23,7 @@ bool InstallMotionCache(const Context&);
 bool InstallAutoSkipEvents(const Context&);
 bool InstallEventSkipBuffer(const Context&);
 bool InstallSuppressTutorials(const Context&);
+bool InstallSuppressDungeonPreview(const Context&);
 bool InstallBattleAutoSkip(const Context&);
 bool InstallLooseFiles(const Context&);
 bool InstallNeptasm(const Context&);

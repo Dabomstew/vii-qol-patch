@@ -9,6 +9,8 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,7 @@ def machine(data):
     return int.from_bytes(data[offset + 4:offset + 6], 'little')
 
 
-def resource(path, number):
+def resource(path, number, kind=10):
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]
     kernel.LoadLibraryExW.restype = wintypes.HMODULE
@@ -64,13 +66,40 @@ def resource(path, number):
     module = kernel.LoadLibraryExW(str(path), None, 2)
     need(module, 'Cannot open PE resources')
     try:
-        item = kernel.FindResourceW(module, ctypes.c_void_p(number), ctypes.c_void_p(10))
-        need(item, f'Missing embedded resource {number}')
+        item = kernel.FindResourceW(module, ctypes.c_void_p(number), ctypes.c_void_p(kind))
+        need(item, f'Missing embedded resource {kind}/{number}')
         size = kernel.SizeofResource(module, item)
         pointer = kernel.LockResource(kernel.LoadResource(module, item))
         need(pointer and size, 'Invalid embedded resource')
         return ctypes.string_at(pointer, size)
     finally: kernel.FreeLibrary(module)
+
+
+def verify_preparer(path):
+    """Validate activation and launch exact standalone bytes, without sidecars."""
+    manifest = ET.fromstring(resource(path, 1, 24))
+    ns = {'asm': 'urn:schemas-microsoft-com:asm.v1'}
+    dependencies = manifest.findall('asm:dependency/asm:dependentAssembly/asm:assemblyIdentity', ns)
+    need(any(item.get('name') == 'Microsoft.Windows.Common-Controls'
+             and item.get('version') == '6.0.0.0'
+             and item.get('publicKeyToken') == '6595b64144ccf1df'
+             and item.get('type') == 'win32' for item in dependencies),
+         'Preparer needs embedded common-controls v6 activation manifest')
+    # A fresh path avoids cached activation state; no application DLLs or manifests.
+    with tempfile.TemporaryDirectory(prefix='preparer-startup-') as folder:
+        standalone = Path(folder) / Path(path).name
+        standalone.write_bytes(Path(path).read_bytes())
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.SetErrorMode.argtypes = [wintypes.UINT]
+        kernel.SetErrorMode.restype = wintypes.UINT
+        previous = kernel.SetErrorMode(0x8003)
+        try:
+            result = subprocess.run([str(standalone), '--help'], cwd=folder,
+                                    capture_output=True, timeout=10)
+        finally:
+            kernel.SetErrorMode(previous)
+        need(result.returncode == 0 and b'--source' in result.stdout,
+             f'Standalone preparer startup failed: 0x{result.returncode & 0xffffffff:08x}')
 
 
 def execute(command, environment):
@@ -136,6 +165,7 @@ END
         need(resource(ROOT / configuration['preparer'], 101) == proxy.read_bytes(), 'Embedded proxy differs from release DLL')
         need(resource(ROOT / configuration['preparer'], 102) == (generated / 'proxy-hashes.txt').read_bytes(), 'Embedded recognition registry mismatch')
         need(resource(ROOT / configuration['preparer'], 103) == (ROOT / configuration['configuration']).read_bytes(), 'Embedded settings mismatch')
+        verify_preparer(ROOT / configuration['preparer'])
     if tests:
         for command in configuration.get('test_commands', []): execute(command, environment)
     artifacts = {path: digest((ROOT / path).read_bytes()) for path in configuration['artifacts']}
@@ -192,6 +222,11 @@ def package(configuration):
     with zipfile.ZipFile(archive) as output:
         need(sorted(output.namelist()) == sorted(payload), 'ZIP allowlist mismatch')
         for path, data in payload.items(): need(output.read(path) == data, f'ZIP byte mismatch: {path}')
+        if configuration.get('preparer'):
+            with tempfile.TemporaryDirectory(prefix='packaged-preparer-') as folder:
+                preparer = Path(folder) / Path(configuration['preparer']).name
+                preparer.write_bytes(output.read(preparer.name))
+                verify_preparer(preparer)
     checksum = digest(archive.read_bytes())
     archive.with_suffix('.zip.sha256').write_text(f'{checksum}  {archive.name}\n', encoding='ascii')
     print(json.dumps({'zip': str(archive), 'sha256': checksum, 'files_verified': len(payload)}, indent=2))

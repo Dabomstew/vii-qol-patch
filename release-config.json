@@ -79,6 +79,9 @@
     [
       "{python}",
       "native/tests/neptasm_aspect_path_test.py"
+    ],
+    [
+      "native/test-dungeon-preview.cmd"
     ]
   ],
   "package_files": [

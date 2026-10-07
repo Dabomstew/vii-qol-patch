@@ -42,12 +42,14 @@ void Initialize(HMODULE proxy) noexcept {
         const Patch patches[]={{L"MipCache",InstallMipCache},{L"MotionCache",InstallMotionCache,0},
             {L"AutoSkipEvents",InstallAutoSkipEvents,0},{L"BattleAutoSkip",InstallBattleAutoSkip,0},
             {L"EventSkipBuffer",InstallEventSkipBuffer,0},{L"SuppressTutorials",InstallSuppressTutorials,0},
+            {L"SuppressDungeonPreviews",InstallSuppressDungeonPreview,0},
             {L"LooseFiles",InstallLooseFiles,0},{L"Neptasm",InstallNeptasm,0},
-            {L"NewGameDetector",InstallNewGameDetector}, {L"LoadTiming",InstallLoadTiming,0}};
+            {L"NewGameDetector",InstallNewGameDetector}};
         for(const auto& patch:patches) {
             if(!Option(context,L"Patches",patch.name,patch.defaultEnabled)) {Log("Patch disabled: %ls",patch.name);continue;}
             Log("Patch %ls: %s",patch.name,patch.install(context)?"installed":"not installed");
         }
+        Log("LoadTiming: %s",InstallLoadTiming(context)?"installed":"not installed");
     } catch(const std::exception& error) {Log("Initialization failed: %s",error.what());}
     catch(...) {Log("Initialization failed with unknown exception");}
 }
