@@ -43,6 +43,7 @@ void Initialize(HMODULE proxy) noexcept {
             {L"AutoSkipEvents",InstallAutoSkipEvents,0},{L"BattleAutoSkip",InstallBattleAutoSkip,0},
             {L"EventSkipBuffer",InstallEventSkipBuffer,0},{L"SuppressTutorials",InstallSuppressTutorials,0},
             {L"SuppressDungeonPreviews",InstallSuppressDungeonPreview,0},
+            {L"JPBattleBalance",InstallJPBattleBalance,0},
             {L"LooseFiles",InstallLooseFiles,0},{L"Neptasm",InstallNeptasm,0},
             {L"NewGameDetector",InstallNewGameDetector}};
         for(const auto& patch:patches) {

@@ -22,3 +22,5 @@ e9334cff931f2bf3e1e168e267a00dcc35b2df7f162465c4cf0cc88cf745513b | recognized le
 c31580a93522c4887714c1636eabf66e5b8352795e212d3e90c987bb0f898b5d | 55a0456 opt-in ADV queue waits and dungeon preview suppression, local Club ZECA qualification 2026-10-07
 3afbcb86bed2e05a18257307371359c0604b09e1a58f40ba538a2f6c29f2062b | 2026-10-07 always-on load timing and queue coverage, main-category FPS/preview settings; local native/static tests, no new live qualification
 df25a16e43a290ba9c88aaaa8a54cc9d89aab3f38e43f5b7dd7e13bb342d665a | Release 0.2.1, audited production 321f47aa36281161831c49bae8e0f2e44f525cf8
+1640b8fd8cda0f074ee2f08275103bd7746499bd8b7b630c77482e0f7a9b7ecf | recognized previous proxy with JP battle balance
+194db90e6d24157cc27d3741a6af187764214e7183f15de74d3c0ad723b882d7 | Release 0.2.2, audited production 54d04d9b108cb54584b80c8ceaae046a1d816501

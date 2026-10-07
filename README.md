@@ -1,11 +1,11 @@
 # VII QoL Patch
 
-Version **0.2.2**.
+Version **0.2.3**.
 
 A Windows patch for **Megadimension Neptunia VII**. Prepare Game builds a
 texture cache and unpacks game assets before you play. The patch reuses that
 data and offers optional story skipping, tutorial skipping, battle skipping,
-FPS unlock during loads, dungeon preview hiding and graphics settings.
+FPS unlock during loads, dungeon preview hiding, JP battle balance and graphics settings.
 
 Supports `NeptuniaVII.exe` SHA-256
 `7ff2aad55e965add3b6fc45bd0ad2158769de014d6f619dc564a50c3e0fa42d9`.
@@ -31,7 +31,7 @@ utility. Follow [Quick Start](docs/QUICK-START.md) and the
 
 Texture caching, motion caching and unpacked assets are enabled by default.
 The included LiveSplit script can start your timer when you select New Game.
-Load timing is active for supported waits. FPS unlock during loads, dungeon preview hiding, story, tutorial and battle skipping, early skip input and neptasm graphics settings are off until you enable them.
+Load timing is active for supported waits. FPS unlock during loads, dungeon preview hiding, story, tutorial and battle skipping, early skip input, JP battle balance and neptasm graphics settings are off until you enable them.
 
 Use a Windows PC that already runs the supported game, including its usual
 DirectX components. Allow roughly 35 GB of extra free space for preparation,

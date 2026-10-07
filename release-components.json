@@ -1,11 +1,11 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "source": "prepare-patch-release/assets/common",
   "sha256": {
     "scripts/build-release.ps1": "dbde8bab7cf2ba2f4939a0c828f367ef33e6fc8869374bfa0b24adf2cd389ae2",
     "scripts/find-msvc.ps1": "47a269700bafc4261257a729dd7dfb5bc1dd46cc0d3e74b4a5caafaae4a38943",
     "scripts/init-msvc.cmd": "f7e34ee16ada50005271ccd626d4a9db23967a64cfa331dd7ba3980541b68962",
     "scripts/package-release.ps1": "99e47366117d2ebf3b355ab224a5c6e55608e1ae017162b4ee42c54cb4cd3dcb",
-    "scripts/release_build.py": "ee666e4a08ec31bca89e202bcee9049d7b78f8d815e07c03a8de40040c9be785"
+    "scripts/release_build.py": "afabac80870530b86e41a59c3d2dca14d09428378f78591cf00629ad1cf6a427"
   }
 }

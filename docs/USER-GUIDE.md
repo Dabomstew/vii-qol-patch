@@ -132,6 +132,13 @@ resource queues. Prepare Game moves saved load-only FPS and dungeon preview
 choices to `UnlockFPSDuringLoads` and `SuppressDungeonPreviews` and removes the
 old timing and queue toggles. Explicit values under the new names take priority.
 
+**Use JP battle balance** is optional and off by default. It changes the damage
+formula for party attackers from level 100 and enemies from level 101, including
+damage to body parts. It also increases EXP bonuses for hit counts and credit
+bonuses for total damage, at all character levels. Enable the checkbox in Prepare
+Game or set `[Patches] JPBattleBalance=1`, then restart the game. Turn it off and
+restart to return to the original formulas; rewards already earned remain earned.
+
 The release defaults are:
 
 | Setting | Default | Effect |
@@ -152,6 +159,7 @@ The release defaults are:
 | `[Patches] SuppressDungeonPreviews` | `0` | Hides optional dungeon preview movies and images in the world-map information window. Available in Prepare Game. |
 | `[Patches] AutoSkipEvents` | `0` | Automatically skips eligible ADV events when enabled. |
 | `[Patches] BattleAutoSkip` | `0` | Enables battle animation/results skipping when enabled. |
+| `[Patches] JPBattleBalance` | `0` | Applies the JP high-level damage formula and increased hit EXP/damage credit bonuses. Available as **Use JP battle balance** in Prepare Game; restart to apply. |
 | `[Patches] EventSkipBuffer` | `0` | Buffers an early event skip input and preserves observed keyboard action order in its confirmation dialog when enabled. |
 | `[EventSkipBuffer] OrderedKeyboard` | `1` | Extends EventSkipBuffer with ordered Up/Down/Enter capture. Set `0` for early-skip buffering alone. Has no effect unless `[Patches] EventSkipBuffer=1`. |
 | `[EventSkipBuffer] UpKey` / `DownKey` / `ConfirmKey` | `38` / `40` / `13` | Decimal Windows virtual-key codes for Up arrow, Down arrow and Enter. Change only to match the corresponding actions remapped in the game; use distinct codes from 1 to 254. |

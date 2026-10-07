@@ -82,6 +82,9 @@
     ],
     [
       "native/test-dungeon-preview.cmd"
+    ],
+    [
+      "native/test-jp-battle-balance.cmd"
     ]
   ],
   "package_files": [

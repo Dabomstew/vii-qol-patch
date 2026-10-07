@@ -77,6 +77,7 @@ def resource(path, number, kind=10):
 
 def verify_preparer(path):
     """Validate activation and launch exact standalone bytes, without sidecars."""
+    path = Path(path).resolve()
     manifest = ET.fromstring(resource(path, 1, 24))
     ns = {'asm': 'urn:schemas-microsoft-com:asm.v1'}
     dependencies = manifest.findall('asm:dependency/asm:dependentAssembly/asm:assemblyIdentity', ns)
@@ -85,21 +86,51 @@ def verify_preparer(path):
              and item.get('publicKeyToken') == '6595b64144ccf1df'
              and item.get('type') == 'win32' for item in dependencies),
          'Preparer needs embedded common-controls v6 activation manifest')
+    data = path.read_bytes()
+    offset = int.from_bytes(data[60:64], 'little')
+    machine(data)
+    subsystem = int.from_bytes(data[offset + 24 + 68:offset + 24 + 70], 'little')
+    need(subsystem in (2, 3), 'Preparer must use Windows GUI or console subsystem')
     # A fresh path avoids cached activation state; no application DLLs or manifests.
     with tempfile.TemporaryDirectory(prefix='preparer-startup-') as folder:
         standalone = Path(folder) / Path(path).name
-        standalone.write_bytes(Path(path).read_bytes())
+        standalone.write_bytes(data)
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel.SetErrorMode.argtypes = [wintypes.UINT]
         kernel.SetErrorMode.restype = wintypes.UINT
         previous = kernel.SetErrorMode(0x8003)
         try:
-            result = subprocess.run([str(standalone), '--help'], cwd=folder,
-                                    capture_output=True, timeout=10)
+            if subsystem == 2:
+                user = ctypes.WinDLL('user32', use_last_error=True)
+                user.WaitForInputIdle.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+                user.WaitForInputIdle.restype = wintypes.DWORD
+                process = subprocess.Popen([str(standalone)], cwd=folder,
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    idle = user.WaitForInputIdle(int(process._handle), 10000)
+                    code = process.poll()
+                    need(idle == 0 and code is None,
+                         f'Standalone GUI startup failed: idle={idle}, exit={code}')
+                finally:
+                    if process.poll() is None: process.terminate()
+                    process.wait(timeout=5)
+            else:
+                result = subprocess.run([str(standalone), '--help'], cwd=folder,
+                                        capture_output=True, timeout=10)
+                need(result.returncode == 0 and result.stdout.strip(),
+                     f'Standalone CLI startup failed: 0x{result.returncode & 0xffffffff:08x}')
         finally:
             kernel.SetErrorMode(previous)
-        need(result.returncode == 0 and b'--source' in result.stdout,
-             f'Standalone preparer startup failed: 0x{result.returncode & 0xffffffff:08x}')
+
+
+def preparer_entries(configuration):
+    """Every shipped executable is a preparer, including alternate CLI entrypoints."""
+    if not configuration.get('preparer'): return []
+    entries = [entry for entry in configuration['package_files']
+               if Path(entry['target']).suffix.lower() == '.exe']
+    need(any(entry['source'] == configuration['preparer'] for entry in entries),
+         'Primary preparer must be in package_files')
+    return entries
 
 
 def execute(command, environment):
@@ -165,7 +196,7 @@ END
         need(resource(ROOT / configuration['preparer'], 101) == proxy.read_bytes(), 'Embedded proxy differs from release DLL')
         need(resource(ROOT / configuration['preparer'], 102) == (generated / 'proxy-hashes.txt').read_bytes(), 'Embedded recognition registry mismatch')
         need(resource(ROOT / configuration['preparer'], 103) == (ROOT / configuration['configuration']).read_bytes(), 'Embedded settings mismatch')
-        verify_preparer(ROOT / configuration['preparer'])
+        for entry in preparer_entries(configuration): verify_preparer(ROOT / entry['source'])
     if tests:
         for command in configuration.get('test_commands', []): execute(command, environment)
     artifacts = {path: digest((ROOT / path).read_bytes()) for path in configuration['artifacts']}
@@ -222,10 +253,10 @@ def package(configuration):
     with zipfile.ZipFile(archive) as output:
         need(sorted(output.namelist()) == sorted(payload), 'ZIP allowlist mismatch')
         for path, data in payload.items(): need(output.read(path) == data, f'ZIP byte mismatch: {path}')
-        if configuration.get('preparer'):
+        for entry in preparer_entries(configuration):
             with tempfile.TemporaryDirectory(prefix='packaged-preparer-') as folder:
-                preparer = Path(folder) / Path(configuration['preparer']).name
-                preparer.write_bytes(output.read(preparer.name))
+                preparer = Path(folder) / Path(entry['target']).name
+                preparer.write_bytes(output.read(entry['target']))
                 verify_preparer(preparer)
     checksum = digest(archive.read_bytes())
     archive.with_suffix('.zip.sha256').write_text(f'{checksum}  {archive.name}\n', encoding='ascii')

@@ -32,7 +32,7 @@ class Settings(Transactions):
     def test_template_and_runtime_defaults(self):
         entries = re.findall(r'\{L"(\w+)", L"[^"]+", (true|false), (true|false)\}',
                              (ROOT / 'native/include/prepare_settings.hpp').read_text())
-        self.assertEqual(len(entries), 9)
+        self.assertEqual(len(entries), 10)
         template = ini(ROOT / 'native/vii-patches.ini')
         runtime = (ROOT / 'native/src/core.cpp').read_text()
         self.run_app('--install')
@@ -65,6 +65,25 @@ class Settings(Transactions):
         self.assertTrue(self.query()['features']['BattleAutoSkip'])
         self.run_app('--install', '--set', 'BattleAutoSkip=0')
         self.assertFalse(self.query()['features']['BattleAutoSkip'])
+
+    def test_jp_balance_defaults_and_roundtrip(self):
+        config = self.game / 'vii-patches.ini'
+        self.assertFalse(self.query()['features']['JPBattleBalance'])
+        config.write_text('; Keep my notes\n[Patches]\nBattleAutoSkip=1\n'
+                          'Mystery=7\n[Other]\nKeep=yes\n', encoding='utf-16')
+        self.run_app('--install')
+        self.assertFalse(self.query()['features']['JPBattleBalance'])
+        self.run_app('--install', '--set', 'JPBattleBalance=1')
+        self.assertTrue(self.query()['features']['JPBattleBalance'])
+        self.run_app('--install')
+        self.assertTrue(self.query()['features']['JPBattleBalance'])
+        self.run_app('--install', '--set', 'JPBattleBalance=0')
+        parsed = ini(config)
+        self.assertFalse(parsed.getboolean('Patches', 'JPBattleBalance'))
+        self.assertTrue(parsed.getboolean('Patches', 'BattleAutoSkip'))
+        self.assertEqual(parsed['Patches']['Mystery'], '7')
+        self.assertEqual(parsed['Other']['Keep'], 'yes')
+        self.assertIn('; Keep my notes', config.read_text(encoding='utf-16'))
 
     def test_load_and_preview_settings_migrate_and_roundtrip(self):
         config = self.game / 'vii-patches.ini'

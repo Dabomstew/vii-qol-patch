@@ -5,6 +5,10 @@ from the unmodified game. Performance can vary between PCs. An earlier
 verification problem during a long play session has not been reproduced or
 confirmed fixed; a successful short session does not settle it.
 
+JP battle balance has been tested in live play by the project owner and reported
+working. Automated checks also cover damage formulas and battle rewards; this
+does not establish full-playthrough coverage.
+
 ## Before testing
 
 1. Confirm the game executable SHA-256 is `7ff2aad55e965add3b6fc45bd0ad2158769de014d6f619dc564a50c3e0fa42d9`.
@@ -21,6 +25,7 @@ For a second pass, change only one optional control at a time, restart the game,
 
 - `AutoSkipEvents=1`: eligible ADV events skip automatically.
 - `BattleAutoSkip=1`: battle animation/results skip behavior is enabled.
+- `JPBattleBalance=1`: party damage changes at level 100 and enemy damage at level 101, including body parts. Hit EXP and damage credit bonuses increase at every character level. Restart after changing this setting.
 - `EventSkipBuffer=1`: remembers an early skip press until the prompt is ready, then processes Up/Down/Enter in the order received. With AutoSkipEvents off, test a quick Yes selection, a deliberate No, reopening the dialog, and the next scene. Selecting No must not cause a delayed skip or reopen the prompt.
 - `SuppressTutorials=1`: automatic Teach Me Histy tutorials are suppressed; manual help remains available.
 

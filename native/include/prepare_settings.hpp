@@ -12,7 +12,7 @@ struct Feature {
 };
 // Runtime missing-key fallbacks for MotionCache/LooseFiles remain off.
 // The preparer/template enable them explicitly; tests pin both contracts.
-inline constexpr std::array<Feature, 9> Features = {{
+inline constexpr std::array<Feature, 10> Features = {{
     {L"MipCache", L"Reuse prepared textures", true, true},
     {L"MotionCache", L"Cache repeated motion data", true, false},
     {L"LooseFiles", L"Load unpacked assets", true, false},
@@ -22,6 +22,7 @@ inline constexpr std::array<Feature, 9> Features = {{
     {L"SuppressTutorials", L"Skip automatic tutorials", false, false},
     {L"BattleAutoSkip", L"Skip battle animations and results", false, false},
     {L"SuppressDungeonPreviews", L"Hide dungeon previews", false, false},
+    {L"JPBattleBalance", L"Use JP battle balance", false, false},
 }};
 struct Settings {
     std::filesystem::path cache, assets;

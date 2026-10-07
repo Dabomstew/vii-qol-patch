@@ -25,6 +25,7 @@ bool InstallEventSkipBuffer(const Context&);
 bool InstallSuppressTutorials(const Context&);
 bool InstallSuppressDungeonPreview(const Context&);
 bool InstallBattleAutoSkip(const Context&);
+bool InstallJPBattleBalance(const Context&);
 bool InstallLooseFiles(const Context&);
 bool InstallNeptasm(const Context&);
 bool InstallNewGameDetector(const Context&);

@@ -8,6 +8,7 @@ bool InstallNeptasm(const Context&){return false;}
 bool InstallNewGameDetector(const Context&){return false;}
 bool InstallLoadTiming(const Context&){return false;}
 bool InstallSuppressDungeonPreview(const Context&){return false;}
+bool InstallJPBattleBalance(const Context&){return false;}
 bool InstallMipCache(const Context&){return false;} bool InstallMotionCache(const Context&){return false;}
 bool InstallLooseFiles(const Context&){return false;} bool InstallAutoSkipEvents(const Context&){return false;} bool InstallEventSkipBuffer(const Context&){return false;} bool InstallSuppressTutorials(const Context&){return false;} bool InstallBattleAutoSkip(const Context&){return false;} void ProbeStartup(const Context&)noexcept{}
 }
