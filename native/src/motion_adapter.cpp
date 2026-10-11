@@ -36,6 +36,9 @@ bool Accessible(void* pointer, size_t size, bool write) noexcept {
     }
     return true;
 }
+void ValidateReplay(void* bytes, size_t size) {
+    if (!Accessible(bytes, size, true)) throw std::runtime_error("motion replay destination inaccessible");
+}
 }
 MotionAdapter::MotionAdapter(MotionBytes::Mode mode, size_t budget, MotionFileFn get, MotionFileFn put,
                              uintptr_t getCaller, uintptr_t putCaller, const uintptr_t* gameCache)
@@ -47,16 +50,13 @@ void MotionAdapter::Fail() noexcept {
     try { cache_.Close(); } catch (...) {}
 }
 bool MotionAdapter::Prepare(uintptr_t caller, uintptr_t expected, int original, const char* path,
-                            void* bytes, uint32_t size, bool write, char (&copy)[257]) {
+                            char (&copy)[257]) {
     if (!enabled_.load() || caller != expected || original != 0) { ++bypasses_; return false; }
     uintptr_t manager = 0;
     if (!ReadManager(gameCache_, manager)) { Fail(); return false; }
     if (manager) { ++bypasses_; return false; }
     if (!CopyPath(path, copy)) { Fail(); return false; }
     if (!MotionBytes::SupportsPath(copy)) { ++bypasses_; return false; }
-    // Oversized/zero payloads are rejected by the cache without dereferencing.
-    // Valid game buffers remain owned/stable for the duration of this call.
-    if (size && size <= budget_ && !Accessible(bytes, size, write)) { Fail(); return false; }
     return true;
 }
 int MotionAdapter::Get(uintptr_t caller, uint32_t nameSpace, const char* path, void* bytes, uint32_t size) {
@@ -64,8 +64,8 @@ int MotionAdapter::Get(uintptr_t caller, uint32_t nameSpace, const char* path, v
     const int original = get_(nameSpace, path, bytes, size); // Never caught/retried by the adapter.
     try {
         char copy[257];
-        if (Prepare(caller, getCaller_, original, path, bytes, size, true, copy) &&
-            cache_.Get(nameSpace, copy, bytes, size) == MotionBytes::Result::Hit) return 1;
+        if (Prepare(caller, getCaller_, original, path, copy) &&
+            cache_.Get(nameSpace, copy, bytes, size, ValidateReplay) == MotionBytes::Result::Hit) return 1;
     } catch (...) { Fail(); }
     return original;
 }
@@ -74,7 +74,11 @@ int MotionAdapter::Put(uintptr_t caller, uint32_t nameSpace, const char* path, v
     const int original = put_(nameSpace, path, bytes, size);
     try {
         char copy[257];
-        if (Prepare(caller, putCaller_, original, path, bytes, size, false, copy)) cache_.Put(nameSpace, copy, bytes, size);
+        if (Prepare(caller, putCaller_, original, path, copy)) {
+            // Stores and duplicate-content checks actually read the buffer.
+            if (size && size <= budget_ && !Accessible(bytes, size, false)) { Fail(); return original; }
+            cache_.Put(nameSpace, copy, bytes, size);
+        }
     } catch (...) { Fail(); }
     return original;
 }

@@ -82,7 +82,8 @@ static void AuditAndFailures() {
     CHECK(a.Snapshot().hits == 0 && a.Snapshot().comparisons == 1 && a.Snapshot().candidates == 1);
     CHECK(a.Get(GetCaller, 0, path, reinterpret_cast<void*>(1), 9) == 0 && a.Snapshot().rejected == 1);
     CHECK(a.Get(GetCaller, 0, path, reinterpret_cast<void*>(1), 4) == 0);
-    CHECK(a.Snapshot().errors == 1 && a.Snapshot().enabled == 0 && a.Snapshot().bytes == 0);
+    CHECK(a.Snapshot().errors == 0 && a.Snapshot().enabled == 1 && a.Snapshot().bytes == 4);
+    CHECK(a.Snapshot().candidates == 2); // Audit never dereferences destination.
     MotionAdapter b(M::Replay, 8, OriginalGet, OriginalPut, GetCaller, PutCaller, &manager);
     b.Enable();
     CHECK(b.Put(PutCaller, 0, reinterpret_cast<const char*>(1), source, 4) == 0);
@@ -98,6 +99,19 @@ static void AuditAndFailures() {
     CHECK(VirtualProtect(readonly, 4096, PAGE_READONLY, &old));
     CHECK(d.Get(GetCaller, 0, path, readonly, 4) == 0 && d.Snapshot().errors == 1);
     CHECK(VirtualFree(readonly, 0, MEM_RELEASE));
+    MotionAdapter e(M::Replay, 8, OriginalGet, OriginalPut, GetCaller, PutCaller, &manager);
+    e.Enable();
+    CHECK(e.Get(GetCaller, 0, path, reinterpret_cast<void*>(1), 4) == 0);
+    CHECK(e.Snapshot().misses == 1 && e.Snapshot().errors == 0 && e.Snapshot().enabled == 1);
+    CHECK(e.Put(PutCaller, 0, path, source, 4) == 0);
+    CHECK(e.Get(GetCaller, 0, path, reinterpret_cast<void*>(1), 3) == 0);
+    CHECK(e.Snapshot().misses == 2 && e.Snapshot().errors == 0);
+    CHECK(e.Get(GetCaller, 0, path, reinterpret_cast<void*>(1), 4) == 0);
+    CHECK(e.Snapshot().errors == 1 && e.Snapshot().enabled == 0 && e.Snapshot().bytes == 0);
+    MotionAdapter f(M::Replay, 8, OriginalGet, OriginalPut, GetCaller, PutCaller, &manager);
+    f.Enable();
+    CHECK(f.Put(PutCaller, 0, path, reinterpret_cast<void*>(1), 4) == 0);
+    CHECK(f.Snapshot().errors == 1 && f.Snapshot().enabled == 0);
 }
 static MotionAdapter* live = nullptr;
 static int __cdecl WrappedGet(uint32_t n, const char* p, void* bytes, uint32_t size) {

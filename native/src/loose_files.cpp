@@ -78,7 +78,11 @@ bool OpenLoose(LooseState& state,void* manager,const char* name,uint32_t* out){
     const auto key=pac::ManagerNamespace(space)+"/"+pac::NormalizePath(name,true);
     const auto found=state.files.find(key);if(found==state.files.end())return false;
     const bool dlc=key.rfind("dlc/",0)==0;const auto& root=dlc?state.dlcRoot:state.root;
-    const auto relative=fs::path(key.substr(dlc?4:9));loose::CheckOutputPath(root,relative);
+    const auto relative=fs::path(key.substr(dlc?4:9));
+    // Ancestors still need reparse checks on every open. Validate the leaf
+    // through the opened OPEN_REPARSE_POINT handle below, avoiding a duplicate
+    // path-attribute query and retaining authoritative type/size checks.
+    loose::CheckOutputPath(root,relative.parent_path());
     Handle file{CreateFileW(loose::Extended(root/relative).c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_OPEN_REPARSE_POINT,nullptr)};
     if(file.h==INVALID_HANDLE_VALUE)return false;
     BY_HANDLE_FILE_INFORMATION info{};

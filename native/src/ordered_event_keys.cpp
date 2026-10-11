@@ -15,6 +15,7 @@ HANDLE stop=nullptr;
 HANDLE wake=nullptr;
 std::atomic<bool> captureInstalled{false};
 DWORD process=0;
+bool trace=false;
 unsigned keys[3]={VK_UP,VK_DOWN,VK_RETURN};
 uintptr_t base=0;
 void* owner=nullptr; void* handle=nullptr; void* setupOwner=nullptr;
@@ -30,8 +31,8 @@ bool Foreground() { DWORD pid=0; GetWindowThreadProcessId(GetForegroundWindow(),
 void Close() {
     unsigned captures=0,replays=0,id=0,seen=0,matches=0,focused=0;
     { std::lock_guard<std::mutex> lock(mutex);
-        if(owner){id=scene;captures=queue.Captures();replays=queue.Replays();}
-        seen=observed;matches=matched;focused=foregroundEvents;
+        if(trace&&owner){id=scene;captures=queue.Captures();replays=queue.Replays();
+            seen=observed;matches=matched;focused=foregroundEvents;}
         queue.Close(); owner=handle=setupOwner=nullptr; scene=0;
     }
     if(id)Log("EventSkipBuffer ordered modal scene=%u captures=%u replays=%u seen=%u matched=%u foreground=%u",id,captures,replays,seen,matches,focused);
@@ -55,10 +56,10 @@ DWORD WINAPI Listen(void*) {
             std::lock_guard<std::mutex> lock(mutex);
             if(!queue.IsOpen())break;
             if(!Foreground()){queue.Close();break;}
-            ++observed;++foregroundEvents;
+            if(trace){++observed;++foregroundEvents;}
             unsigned held=0;
             for(unsigned i=0;i<3;++i){const bool down=(GetAsyncKeyState(keys[i])&0x8000)!=0;
-                if(down){++matched;held|=1u<<i;}}
+                if(down){if(trace)++matched;held|=1u<<i;}}
             queue.Sample(held,GetTickCount64());
         }
         CancelWaitableTimer(timer);
@@ -112,6 +113,7 @@ int __fastcall DownRepeat(void* d,void*,unsigned m) { return m==0x400000?Query(d
 void ResetOrderedEventKeys() { if (enabled.load(std::memory_order_acquire)) Close(); }
 bool InstallOrderedEventKeys(const Context& context) {
     if (!Option(context,L"EventSkipBuffer",L"OrderedKeyboard",1)) return true;
+    trace=Option(context,L"EventSkipBuffer",L"Trace",0)!=0;
     base=reinterpret_cast<uintptr_t>(context.game); process=GetCurrentProcessId();
     const wchar_t* names[]={L"UpKey",L"DownKey",L"ConfirmKey"};
     for (unsigned i=0;i<3;++i) {

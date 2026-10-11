@@ -21,7 +21,7 @@ public:
     MotionTelemetry Snapshot() const;
 private:
     bool Prepare(uintptr_t caller, uintptr_t expected, int original, const char* path,
-                 void* bytes, uint32_t size, bool write, char (&copy)[257]);
+                 char (&copy)[257]);
     void Fail() noexcept;
     MotionBytes cache_;
     MotionBytes::Mode mode_;

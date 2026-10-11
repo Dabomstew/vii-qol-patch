@@ -57,18 +57,21 @@ void MotionBytes::Remove(size_t index) {
 }
 void MotionBytes::Clear() { while (stats_.entries) Remove(stats_.entries - 1); }
 void MotionBytes::Mismatch() { ++stats_.mismatches; stats_.disabled = true; Clear(); }
-MotionBytes::Result MotionBytes::Get(uint32_t nameSpace, const char* path, void* destination, size_t size) {
+MotionBytes::Result MotionBytes::Get(uint32_t nameSpace, const char* path, void* destination, size_t size,
+                                   ReplayValidator validate) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (stats_.disabled || stats_.closed) return Result::Disabled;
     path = EligiblePath(path);
     if (!path || !destination || !size || size > stats_.budget) { ++stats_.rejected; return Result::Rejected; }
     const size_t index = Find(nameSpace, path);
     if (index == stats_.entries || entries_[index].size != size) { ++stats_.misses; return Result::Miss; }
+    if (mode_ == Mode::Replay && validate) validate(destination, size);
     Touch(index); ++stats_.candidates;
     if (mode_ == Mode::Audit) return Result::Candidate;
     const auto& entry = entries_[stats_.entries - 1];
     std::memcpy(destination, entry.bytes, size);
-    if (std::memcmp(destination, entry.bytes, size)) { Mismatch(); return Result::Mismatch; }
+    // The caller owns a stable destination. Rechecking this copy does not
+    // validate cache identity; duplicate Put checks below still do that.
     ++stats_.hits;
     return Result::Hit;
 }

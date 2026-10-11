@@ -88,3 +88,10 @@ If an unknown `dinput8.dll` is detected, do not replace it. Resolve the mod conf
   correctness throughout a full playthrough, a clean game exit, or the same
   performance on another PC. Loader logs alone do not measure physical disk reads.
 - `[MipCache] Verify=0` keeps size and texture-layout checks but can miss corruption that changes texture pixels. It skips stored-source reads, record checksums and GPU readback comparison. `LooseFiles.Verify=0` does not detect same-size edits.
+
+Texture-cache success messages require `[MipCache] Trace=1`. With Trace=0,
+missing hit messages do not mean the cache is unused. `[EventSkipBuffer] Trace=1`
+enables ordered keyboard diagnostics. Use tracing only for a short reproduction.
+
+Optional graphics settings may fail to take effect on some launches. This
+remains under investigation. Leave them disabled if they do not work as expected.

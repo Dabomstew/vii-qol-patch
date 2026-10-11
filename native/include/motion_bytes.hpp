@@ -27,7 +27,11 @@ public:
     ~MotionBytes();
     MotionBytes(const MotionBytes&) = delete;
     MotionBytes& operator=(const MotionBytes&) = delete;
-    Result Get(uint32_t nameSpace, const char* path, void* destination, size_t size);
+    // Called under the cache lock only immediately before a Replay hit writes.
+    // A validator may throw but must not reenter this cache; misses/Audit skip it.
+    using ReplayValidator = void (*)(void*, size_t);
+    Result Get(uint32_t nameSpace, const char* path, void* destination, size_t size,
+               ReplayValidator validate = nullptr);
     Result Put(uint32_t nameSpace, const char* path, const void* source, size_t size);
     Stats Snapshot() const;
     void Close();

@@ -15,6 +15,28 @@ static unsigned checks = 0;
 #define CHECK(condition) do { ++checks; if (!(condition)) { \
     std::fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #condition); std::exit(1); } } while (false)
 static const char* path = "/MODEL/CHARA/061/MOTION/BATTLE.cl3";
+static unsigned validations = 0;
+static bool rejectReplay = false;
+static void Validate(void*, size_t) {
+    ++validations;
+    if (rejectReplay) throw std::runtime_error("rejected destination");
+}
+static void DeferredValidation() {
+    char destination[4] = {'z','z','z','z'};
+    Cache replay(M::Replay, 8), audit(M::Audit, 8);
+    CHECK(replay.Get(0, path, destination, 4, Validate) == R::Miss && validations == 0);
+    CHECK(replay.Put(0, path, "abcd", 4) == R::Stored);
+    CHECK(audit.Put(0, path, "abcd", 4) == R::Stored);
+    CHECK(audit.Get(0, path, destination, 4, Validate) == R::Candidate && validations == 0);
+    CHECK(replay.Get(0, path, destination, 3, Validate) == R::Miss && validations == 0);
+    rejectReplay = true; bool threw = false;
+    try { replay.Get(0, path, destination, 4, Validate); } catch (const std::runtime_error&) { threw = true; }
+    CHECK(threw && validations == 1 && !std::memcmp(destination, "zzzz", 4));
+    CHECK(replay.Snapshot().hits == 0 && replay.Snapshot().bytes == 4);
+    rejectReplay = false;
+    CHECK(replay.Get(0, path, destination, 4, Validate) == R::Hit && validations == 2);
+    CHECK(!std::memcmp(destination, "abcd", 4));
+}
 struct Heap {
     size_t live = 0, peak = 0, allocations = 0;
     bool fail = false;
@@ -141,6 +163,6 @@ static void ConcurrentCalls() {
     CHECK(s.hits == 4000 && s.comparisons == 4000 && s.bytes == 16 && s.mismatches == 0);
 }
 int main() {
-    OwnershipAndAudit(); BoundsAndFailures(); ConcurrentCalls();
+    OwnershipAndAudit(); BoundsAndFailures(); DeferredValidation(); ConcurrentCalls();
     std::printf("PASS: %u checks; audit/replay ownership, namespace and size isolation, LRU bounds, allocation failure, mismatch shutdown, cleanup, 4000 concurrent hits\n", checks);
 }

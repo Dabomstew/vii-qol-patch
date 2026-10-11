@@ -85,6 +85,9 @@
     ],
     [
       "native/test-jp-battle-balance.cmd"
+    ],
+    [
+      "native/test-runtime-overhead.cmd"
     ]
   ],
   "package_files": [

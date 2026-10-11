@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cstdio>
 #include <cstdlib>
+#include <winioctl.h>
 namespace vii {
 void Log(const char*,...) noexcept {}
 int Option(const Context&,const wchar_t*,const wchar_t*,int fallback){return fallback;}
@@ -20,6 +21,22 @@ static void __fastcall Append(void* vector,void*,void* value){
 }
 static char __fastcall Fallback(void*,void*,const char*,uint32_t* out){++fallbacks;*out=77;return 1;}
 static void Write(const fs::path& path,const std::string& data){std::ofstream f(path,std::ios::binary);f<<data;CHECK(bool(f));}
+static void Junction(const fs::path& link,const fs::path& target){
+    CHECK(fs::create_directory(link));
+    const auto print=fs::absolute(target).wstring(),sub=L"\\??\\"+print;
+    const auto subBytes=sub.size()*sizeof(wchar_t),printBytes=print.size()*sizeof(wchar_t);
+    std::vector<unsigned char> buffer(16+subBytes+2+printBytes+2);
+    const DWORD tag=IO_REPARSE_TAG_MOUNT_POINT;std::memcpy(buffer.data(),&tag,4);
+    const USHORT fields[]={USHORT(buffer.size()-8),0,0,USHORT(subBytes),USHORT(subBytes+2),USHORT(printBytes)};
+    std::memcpy(buffer.data()+4,fields,sizeof(fields));
+    std::memcpy(buffer.data()+16,sub.c_str(),subBytes+2);
+    std::memcpy(buffer.data()+16+subBytes+2,print.c_str(),printBytes+2);
+    HANDLE directory=CreateFileW(link.c_str(),GENERIC_WRITE,0,nullptr,OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT|FILE_FLAG_BACKUP_SEMANTICS,nullptr);CHECK(directory!=INVALID_HANDLE_VALUE);
+    DWORD done=0;const bool ok=DeviceIoControl(directory,FSCTL_SET_REPARSE_POINT,buffer.data(),DWORD(buffer.size()),nullptr,0,&done,nullptr)!=FALSE;
+    const auto error=GetLastError();CloseHandle(directory);
+    if(!ok)std::fprintf(stderr,"junction fixture creation failed: %lu\n",error);CHECK(ok);
+}
 int wmain(int argc,wchar_t** argv){
     CHECK(argc==2);fs::path root(argv[1]),contents=root/L"CONTENTS",output=contents/L"vii-unpacked";
     fs::create_directories(output/L"game/model");fs::create_directories(output/L"system");
@@ -54,6 +71,22 @@ int wmain(int argc,wchar_t** argv){
     CHECK(!OpenLoose(*state,manager,"/MODEL/test.bin",&index)&&mismatches==1);
     state->verify=false;CHECK(OpenLoose(*state,manager,"/MODEL/test.bin",&index));CloseHandle(Field<HANDLE>(entry,4));Field<unsigned char>(entry,8)=0;
     Write(output/L"game/model/test.bin","short");CHECK(!OpenLoose(*state,manager,"/MODEL/test.bin",&index)&&mismatches==2);
+    // The opened leaf remains authoritative when its attributes are no longer
+    // queried by path. A directory masquerading as a manifest file is refused.
+    fs::remove(output/L"game/model/test.bin");fs::create_directory(output/L"game/model/test.bin");
+    CHECK(!OpenLoose(*state,manager,"/MODEL/test.bin",&index));
+    fs::remove(output/L"game/model/test.bin");
+    Junction(output/L"game/model/test.bin",output/L"system");
+    CHECK(!OpenLoose(*state,manager,"/MODEL/test.bin",&index));
+    CHECK(RemoveDirectoryW((output/L"game/model/test.bin").c_str()));
+    Write(output/L"game/model/test.bin","loose-test-bytes");
+    fs::rename(output/L"game/model",output/L"game/model-real");
+    Junction(output/L"game/model",output/L"game/model-real");
+    threw=false;try{OpenLoose(*state,manager,"/MODEL/test.bin",&index);}catch(...){threw=true;}CHECK(threw);
+    CHECK(RemoveDirectoryW((output/L"game/model").c_str()));
+    fs::rename(output/L"game/model-real",output/L"game/model");
+    CHECK(OpenLoose(*state,manager,"/MODEL/test.bin",&index));
+    CloseHandle(Field<HANDLE>(entry,4));Field<unsigned char>(entry,8)=0;
     CHECK(!OpenLoose(*state,manager,"/MODEL/missing.bin",&index));
     looseState=std::move(state);originalOpen=reinterpret_cast<OpenFn>(Fallback);looseEnabled=true;
     CHECK(NativeLooseOpen(manager,nullptr,"../unsafe",&index)==1&&index==77&&fallbacks==1&&errors==1);

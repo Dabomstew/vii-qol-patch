@@ -17,6 +17,7 @@ struct Settings {
 };
 struct State {
     Context context;
+    uintptr_t imageBegin = 0, imageEnd = 0;
     Settings settings;
     HMODULE d3d11 = nullptr;
     unsigned sourceWidth = 1920, sourceHeight = 1080; // stock render-target dimensions
@@ -31,7 +32,6 @@ struct State {
     IDXGISwapChain* swapChain = nullptr;
     void** deviceVtable = nullptr;
     void** contextVtable = nullptr;
-    void** swapVtable = nullptr;
 };
 State* state = nullptr; // pinned for process lifetime; COM objects own the vtables.
 
@@ -39,21 +39,11 @@ using CreateDeviceFn = HRESULT (WINAPI*)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE
     const D3D_FEATURE_LEVEL*, UINT, UINT, const DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**,
     ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext**);
 using CreateTextureFn = HRESULT (STDMETHODCALLTYPE*)(ID3D11Device*, const D3D11_TEXTURE2D_DESC*, const D3D11_SUBRESOURCE_DATA*, ID3D11Texture2D**);
-using CreateRtvFn = HRESULT (STDMETHODCALLTYPE*)(ID3D11Device*, ID3D11Resource*, const D3D11_RENDER_TARGET_VIEW_DESC*, ID3D11RenderTargetView**);
-using PresentFn = HRESULT (STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
-using GetBufferFn = HRESULT (STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, REFIID, void**);
-using OmSetFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, ID3D11RenderTargetView* const*);
 using ViewportFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, const D3D11_VIEWPORT*);
-using ClearRtvFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11RenderTargetView*, const FLOAT[4]);
 
 CreateDeviceFn originalCreate = nullptr;
 CreateTextureFn originalTexture = nullptr;
-CreateRtvFn originalRtv = nullptr;
-PresentFn originalPresent = nullptr;
-GetBufferFn originalGetBuffer = nullptr;
-OmSetFn originalOmSet = nullptr;
 ViewportFn originalViewport = nullptr;
-ClearRtvFn originalClear = nullptr;
 float fpsMax = 1024.0f;
 uintptr_t fpsReturn = 0;
 float aspectRatio = 16.0f / 9.0f;
@@ -68,13 +58,19 @@ extern "C" __declspec(naked) void FpsFrameGate() {
 }
 
 bool InGame(uintptr_t caller) noexcept {
-    if (!state || !state->context.game) return false;
-    const auto base = reinterpret_cast<uintptr_t>(state->context.game);
+    return state && caller >= state->imageBegin && caller < state->imageEnd;
+}
+bool ReadImageRange(State& s) noexcept {
+    const auto base = reinterpret_cast<uintptr_t>(s.context.game);
+    if (!base) return false;
     const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     __try {
         if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
         const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS32*>(base + dos->e_lfanew);
-        return nt->Signature == IMAGE_NT_SIGNATURE && caller >= base && caller < base + nt->OptionalHeader.SizeOfImage;
+        const auto size = nt->OptionalHeader.SizeOfImage;
+        if (nt->Signature != IMAGE_NT_SIGNATURE || !size || size > UINTPTR_MAX - base) return false;
+        s.imageBegin = base; s.imageEnd = base + size;
+        return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 unsigned ClampDimension(float value, unsigned fallback) {
@@ -113,19 +109,6 @@ HRESULT STDMETHODCALLTYPE CreateTexture(ID3D11Device* device, const D3D11_TEXTUR
     }
     return originalTexture(device, desc, initial, output);
 }
-HRESULT STDMETHODCALLTYPE CreateRtv(ID3D11Device* device, ID3D11Resource* resource,
-    const D3D11_RENDER_TARGET_VIEW_DESC* desc, ID3D11RenderTargetView** output) {
-    return originalRtv(device, resource, desc, output);
-}
-HRESULT STDMETHODCALLTYPE Present(IDXGISwapChain* chain, UINT sync, UINT flags) {
-    return originalPresent(chain, sync, flags);
-}
-HRESULT STDMETHODCALLTYPE GetBuffer(IDXGISwapChain* chain, UINT index, REFIID iid, void** output) {
-    return originalGetBuffer(chain, index, iid, output);
-}
-void STDMETHODCALLTYPE OmSet(ID3D11DeviceContext* context, UINT count, ID3D11RenderTargetView* const* views) {
-    originalOmSet(context, count, views);
-}
 void STDMETHODCALLTYPE Viewport(ID3D11DeviceContext* context, UINT count, const D3D11_VIEWPORT* viewports) {
     if (!state || !(state->settings.resolution || state->settings.fitWindow || state->settings.ultrawide) ||
         !InGame(reinterpret_cast<uintptr_t>(_ReturnAddress())) || count != 1 || !viewports) {
@@ -147,9 +130,6 @@ void STDMETHODCALLTYPE Viewport(ID3D11DeviceContext* context, UINT count, const 
     }
     originalViewport(context, count, &viewport);
 }
-void STDMETHODCALLTYPE ClearRtv(ID3D11DeviceContext* context, ID3D11RenderTargetView* view, const FLOAT color[4]) {
-    originalClear(context, view, color);
-}
 bool PatchAspect(const Context& context, float ratio);
 
 bool InstallComHooks(IDXGISwapChain* chain, ID3D11Device* device, ID3D11DeviceContext* context) {
@@ -160,19 +140,18 @@ bool InstallComHooks(IDXGISwapChain* chain, ID3D11Device* device, ID3D11DeviceCo
         state->outputWidth = desc.BufferDesc.Width; state->outputHeight = desc.BufferDesc.Height;
     }
     Recompute();
-    state->swapVtable = CloneVtable(chain, 18); state->deviceVtable = CloneVtable(device, 43); state->contextVtable = CloneVtable(context, 51);
-    if (!state->swapVtable || !state->deviceVtable || !state->contextVtable) return false;
-    originalPresent = Original<PresentFn>(state->swapVtable, 8); originalGetBuffer = Original<GetBufferFn>(state->swapVtable, 9);
-    originalTexture = Original<CreateTextureFn>(state->deviceVtable, 5); originalRtv = Original<CreateRtvFn>(state->deviceVtable, 9);
-    originalOmSet = Original<OmSetFn>(state->contextVtable, 33); originalViewport = Original<ViewportFn>(state->contextVtable, 44); originalClear = Original<ClearRtvFn>(state->contextVtable, 50);
-    state->swapVtable[8] = reinterpret_cast<void*>(Present); state->swapVtable[9] = reinterpret_cast<void*>(GetBuffer);
-    state->deviceVtable[5] = reinterpret_cast<void*>(CreateTexture); state->deviceVtable[9] = reinterpret_cast<void*>(CreateRtv);
-    state->contextVtable[33] = reinterpret_cast<void*>(OmSet); state->contextVtable[44] = reinterpret_cast<void*>(Viewport); state->contextVtable[50] = reinterpret_cast<void*>(ClearRtv);
+    state->deviceVtable = CloneVtable(device, 43); state->contextVtable = CloneVtable(context, 51);
+    if (!state->deviceVtable || !state->contextVtable) return false;
+    originalTexture = Original<CreateTextureFn>(state->deviceVtable, 5);
+    originalViewport = Original<ViewportFn>(state->contextVtable, 44);
+    // Only these two methods alter rendering. Leave swap-chain operations,
+    // render-target binding, view creation and clears on their original paths.
+    state->deviceVtable[5] = reinterpret_cast<void*>(CreateTexture);
+    state->contextVtable[44] = reinterpret_cast<void*>(Viewport);
     DWORD ignored = 0;
-    VirtualProtect(state->swapVtable, 18 * sizeof(void*), PAGE_READONLY, &ignored);
     VirtualProtect(state->deviceVtable, 43 * sizeof(void*), PAGE_READONLY, &ignored);
     VirtualProtect(state->contextVtable, 51 * sizeof(void*), PAGE_READONLY, &ignored);
-    return originalPresent && originalGetBuffer && originalTexture && originalRtv && originalOmSet && originalViewport && originalClear;
+    return originalTexture && originalViewport;
 }
 
 HRESULT WINAPI CreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE type, HMODULE software, UINT flags,
@@ -300,6 +279,7 @@ bool ApplyStatic(const Context& context, const Settings& s) {
 bool InstallNeptasm(const Context& context) {
     try {
         auto candidate = std::make_unique<State>(); candidate->context = context;
+        if (!ReadImageRange(*candidate)) return false;
         auto& s = candidate->settings;
         s.fps = Option(context, L"Neptasm", L"FPSUnlock", 0) != 0;
         s.camera = Option(context, L"Neptasm", L"CameraUnlock", 0) != 0;

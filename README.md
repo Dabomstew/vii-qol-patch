@@ -1,6 +1,6 @@
 # VII QoL Patch
 
-Version **0.2.4**.
+Version **0.2.5**.
 
 A Windows patch for **Megadimension Neptunia VII**. Prepare Game builds a
 texture cache and unpacks game assets before you play. The patch reuses that
@@ -44,8 +44,8 @@ saved folder choices.
 Testing covers selected scenes on the supported executable, rather than a full
 playthrough on every setup. Textures the cache cannot handle use the game's
 normal loader. An earlier verification problem during a long play session has
-not been reproduced or confirmed fixed. Optional graphics settings have only
-been checked in some scenes and menus. See
+not been reproduced or confirmed fixed. Optional graphics settings may fail to take effect on some launches.
+This is under investigation; leave them disabled if they do not work as expected. See
 [Troubleshooting and validation](docs/TESTING.md) and
 [Load timing](docs/LOAD-TIMING.md) for coverage and reporting details.
 

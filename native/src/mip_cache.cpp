@@ -22,7 +22,7 @@ struct Entry {
 struct State {
     Context context;HMODULE library=nullptr;TextureCreateFn original=nullptr;TextureSaveFn save=nullptr;
     std::list<Entry> entries;ComPtr<ID3D11Device> device;std::atomic<DWORD> owner{0};
-    size_t budget=16*1024*1024,bytes=0,maxEntries=128;bool verify=false,traceLarge=false,singleMipCache=false;std::atomic<bool> enabled{true};
+    size_t budget=16*1024*1024,bytes=0,maxEntries=128;bool verify=false,singleMipCache=false;std::atomic<bool> enabled{true};
     uint64_t hits=0,misses=0,evictions=0,verified=0,mismatches=0,readbackFailures=0,diskHits=0,diskStores=0;
     TextureDisk disk[2];int diskMode=0;bool diskStarted=false;std::wstring diskDirectory,captureDirectory;
     HANDLE trace=INVALID_HANDLE_VALUE;std::mutex traceMutex;std::atomic<uint64_t> sequence{0};
@@ -36,11 +36,11 @@ static void Trace(State& s,const char* text)noexcept{
         if(!WriteFile(s.trace,text,DWORD(n),&done,nullptr)||done!=n)Log("MipCache trace write failed error=%lu",GetLastError());}catch(...){}
 }
 struct Request {
-    State& s;uint64_t id;LARGE_INTEGER start{};HRESULT result=E_FAIL;const char* event="exception";const char* reason="none";
+    State& s;uint64_t id=0;LARGE_INTEGER start{};HRESULT result=E_FAIL;const char* event="exception";const char* reason="none";
     bool store=false,queued=false,verified=false;D3D11_TEXTURE2D_DESC desc{};size_t generated=0;
-    Request(State& cache,uintptr_t caller,const void* source,size_t size,TextureLoadInfo* options):s(cache),id(++s.sequence){
-        QueryPerformanceCounter(&start);
+    Request(State& cache,uintptr_t caller,const void* source,size_t size,TextureLoadInfo* options):s(cache){
         if(s.trace==INVALID_HANDLE_VALUE)return;
+        id=++s.sequence;QueryPerformanceCounter(&start);
         auto digest=source&&size&&size<=TextureMaxBytes?TextureDigestText(Hash(source,size)):"unavailable";
         if(!s.captureDirectory.empty()&&source&&size&&size<=TextureMaxBytes){
             std::wstring name(digest.begin(),digest.end());auto target=s.captureDirectory+L"\\"+name+L".bin";
@@ -54,7 +54,7 @@ struct Request {
         char line[1600];char opts[256]{};if(options)for(unsigned i=0;i<13;++i)sprintf_s(opts+i*9,sizeof(opts)-i*9,"%08x,",options->fields[i]);
         sprintf_s(line,"begin id=%llu qpc=%lld thread=%lu caller_rva=%08x source_sha256=%s source_bytes=%zu options=%s\n",id,start.QuadPart,GetCurrentThreadId(),unsigned(caller),digest.c_str(),size,options?opts:"null");Trace(s,line);
     }
-    ~Request(){LARGE_INTEGER end{};QueryPerformanceCounter(&end);char line[768];sprintf_s(line,
+    ~Request(){if(s.trace==INVALID_HANDLE_VALUE)return;LARGE_INTEGER end{};QueryPerformanceCounter(&end);char line[768];sprintf_s(line,
         "end id=%llu qpc=%lld ticks=%lld event=%s reason=%s hr=%08lx stored=%u queued=%u verified=%u generated_bytes=%zu width=%u height=%u mips=%u format=%u\n",
         id,end.QuadPart,end.QuadPart-start.QuadPart,event,reason,result,store,queued,verified,generated,desc.Width,desc.Height,desc.MipLevels,desc.Format);Trace(s,line);}
 };
@@ -89,7 +89,8 @@ __declspec(noinline) static HRESULT WINAPI Create(ID3D11Device* device,const voi
             catch(const std::exception& e){s.diskMode=0;Log("MipCache disk disabled: %s",e.what());}
             if(s.diskMode==2)try{s.writer=std::make_unique<TextureWriter>(32u*1024*1024,[&s](const TextureWriteRecord& r){
                 bool ok=false;try{std::lock_guard<std::mutex> lock(s.diskWriteMutex);ok=s.disk[r.recipe].Write(r.source,r.dds,r.desc);}catch(...){}
-                char line[128];sprintf_s(line,"store id=%llu ok=%u\n",r.request,ok);Trace(s,line);if(!ok)Log("MipCache asynchronous store failed request=%llu",r.request);
+                if(s.trace!=INVALID_HANDLE_VALUE){char line[128];sprintf_s(line,"store id=%llu ok=%u\n",r.request,ok);Trace(s,line);}
+                if(!ok)Log("MipCache asynchronous store failed request=%llu",r.request);
             });}catch(...){Log("MipCache writer unavailable; using synchronous stores");}
         }
         Entry entry;entry.recipe=recipe;bool hit=false;
@@ -97,7 +98,7 @@ __declspec(noinline) static HRESULT WINAPI Create(ID3D11Device* device,const voi
             s.bytes-=it->Cost();entry=std::move(*it);s.entries.erase(it);hit=true;request.event="ram_hit";break;}
         if(!hit&&s.diskMode){
             try{hit=s.disk[recipe].Read({source,size},entry.diskDds,entry.upload,s.verify);}catch(const std::exception& e){Log("MipCache disk read failed: %s",e.what());}
-            if(hit){++s.diskHits;request.event="disk_hit";Log("MipCache disk_hit count=%llu source_bytes=%zu",s.diskHits,size);}
+            if(hit){++s.diskHits;request.event="disk_hit";if(s.trace!=INVALID_HANDLE_VALUE)Log("MipCache disk_hit count=%llu source_bytes=%zu",s.diskHits,size);}
         }
         if(hit){
             ++s.hits;request.desc=entry.upload.desc;request.generated=entry.Bytes().size();result=UploadTexture(device,entry.upload,entry.Bytes(),output);cachedOutput=SUCCEEDED(result)&&*output;
@@ -127,6 +128,8 @@ __declspec(noinline) static HRESULT WINAPI Create(ID3D11Device* device,const voi
                 entry=Entry{};entry.recipe=recipe;entry.dds=Serialize(s,*output);request.generated=entry.Bytes().size();
                 if(entry.dds&&PrepareTextureUpload(request.desc,entry.Bytes(),entry.upload)){
                     if(s.diskMode==2){try{
+                        // Untraced hits need no ID; stores retain unique failure diagnostics.
+                        if(!request.id)request.id=++s.sequence;
                         if(s.writer)request.queued=s.writer->Enqueue(request.id,recipe,{source,size},entry.Bytes(),request.desc);
                         if(!request.queued){std::lock_guard<std::mutex> lock(s.diskWriteMutex);request.store=s.disk[recipe].Write({source,size},entry.Bytes(),request.desc);}
                     }catch(const std::exception& e){Log("MipCache disk store failed: %s",e.what());}
@@ -135,7 +138,7 @@ __declspec(noinline) static HRESULT WINAPI Create(ID3D11Device* device,const voi
                 }else{request.reason="serialization_or_layout_failed";++s.readbackFailures;}
             }else request.reason="unsupported_layout_or_resource_limit";
         }
-        if((s.hits+s.misses)%100==0||s.hits+s.misses==1)Log("MipCache hits=%llu misses=%llu entries=%zu bytes=%zu evictions=%llu verified=%llu mismatches=%llu readback_failures=%llu disk_hits=%llu disk_stores=%llu",s.hits,s.misses,s.entries.size(),s.bytes,s.evictions,s.verified,s.mismatches,s.readbackFailures,s.diskHits,s.diskStores);
+        if(s.trace!=INVALID_HANDLE_VALUE&&((s.hits+s.misses)%100==0||s.hits+s.misses==1))Log("MipCache hits=%llu misses=%llu entries=%zu bytes=%zu evictions=%llu verified=%llu mismatches=%llu readback_failures=%llu disk_hits=%llu disk_stores=%llu",s.hits,s.misses,s.entries.size(),s.bytes,s.evictions,s.verified,s.mismatches,s.readbackFailures,s.diskHits,s.diskStores);
         return result;
     }catch(const std::exception& e){Log("MipCache exception: %s",e.what());if(originalCalled)return result;if(cachedOutput&&output&&*output){(*output)->Release();*output=nullptr;}return original();}
 }
@@ -147,7 +150,6 @@ bool InstallMipCache(const Context& context){
     int mib=Option(context,L"MipCache",L"BudgetMiB",16),entries=Option(context,L"MipCache",L"MaxEntries",128);
     if(mib<1||mib>256||entries<1||entries>1024)return false;
     candidate->budget=size_t(mib)*1024*1024;candidate->maxEntries=entries;candidate->verify=Option(context,L"MipCache",L"Verify",0)!=0;
-    candidate->traceLarge=Option(context,L"MipCache",L"TraceLarge",0)!=0;
     candidate->singleMipCache=Option(context,L"MipCache",L"SingleMipCache",0)!=0;
     candidate->diskMode=Option(context,L"MipCache",L"DiskMode",0);if(candidate->diskMode<0||candidate->diskMode>2)return false;
     wchar_t directory[32768]{};GetPrivateProfileStringW(L"MipCache",L"DiskDirectory",L"vii-speedrun-patch\\cache",directory,32768,context.ini.c_str());
