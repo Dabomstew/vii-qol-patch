@@ -32,7 +32,7 @@ bool TextureDisk::Open(const std::wstring& path,const Digest& key) {
     if(lock==INVALID_HANDLE_VALUE)return false;
     directory=ns;identity=key;return true; // No startup enumeration, preload, or retention cap.
 }
-bool TextureDisk::Read(TextureBytes source,std::vector<unsigned char>& generated,TextureUpload& upload) {
+bool TextureDisk::Read(TextureBytes source,std::vector<unsigned char>& generated,TextureUpload& upload,bool verifyContents) {
     if(directory.empty()||!source.data()||source.size()>TextureMaxBytes)return false;
     Handle file{CreateFileW(Path(source).c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,nullptr)};
     if(file.value==INVALID_HANDLE_VALUE)return false;
@@ -40,12 +40,20 @@ bool TextureDisk::Read(TextureBytes source,std::vector<unsigned char>& generated
     if(!GetFileSizeEx(file.value,&length)||!ReadAll(file.value,&h,sizeof(h))||h.magic!=magic||h.identity!=identity||
        h.sourceSize!=source.size()||h.ddsSize<128||h.ddsSize>TextureMaxBytes||
        uint64_t(sizeof(h))+h.sourceSize+h.ddsSize+32!=uint64_t(length.QuadPart))return false;
-    Sha hash;hash.Add(&h,sizeof(h));unsigned char buffer[65536];
-    for(size_t at=0;at<source.size();){size_t n=(std::min)(sizeof(buffer),source.size()-at);
-        if(!ReadAll(file.value,buffer,n)||memcmp(buffer,source.data()+at,n))return false;hash.Add(buffer,n);at+=n;}
-    std::vector<unsigned char> dds(h.ddsSize);Digest expected{};
-    if(!ReadAll(file.value,dds.data(),dds.size())||!ReadAll(file.value,expected.data(),32))return false;
-    hash.Add(dds.data(),dds.size());if(hash.Finish()!=expected)return false;
+    std::vector<unsigned char> dds(h.ddsSize);
+    if(verifyContents){
+        Sha hash;hash.Add(&h,sizeof(h));unsigned char buffer[65536];
+        for(size_t at=0;at<source.size();){size_t n=(std::min)(sizeof(buffer),source.size()-at);
+            if(!ReadAll(file.value,buffer,n)||memcmp(buffer,source.data()+at,n))return false;hash.Add(buffer,n);at+=n;}
+        Digest expected{};
+        if(!ReadAll(file.value,dds.data(),dds.size())||!ReadAll(file.value,expected.data(),32))return false;
+        hash.Add(dds.data(),dds.size());if(hash.Finish()!=expected)return false;
+    }else{
+        // The content-addressed filename still hashes the current source. Skip
+        // its stored duplicate and read only the generated DDS from VMT2.
+        LARGE_INTEGER offset{};offset.QuadPart=sizeof(h)+uint64_t(h.sourceSize);
+        if(!SetFilePointerEx(file.value,offset,nullptr,FILE_BEGIN)||!ReadAll(file.value,dds.data(),dds.size()))return false;
+    }
     TextureUpload layout;if(!PrepareTextureUpload(h.desc,dds,layout))return false;
     generated=std::move(dds);upload=std::move(layout);return true;
 }

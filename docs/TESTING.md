@@ -48,7 +48,7 @@ original 16:9 limitations, especially with `Ultrawide`; report clipping,
 misalignment, or a black/incorrect render area rather than combining more
 options to work around it. Set `[Patches] Neptasm=0` after testing.
 
-Optional integrity checks are separate from ordinary play: set `[LooseFiles] Verify=1` to hash every loose asset open, or `[MipCache] Verify=1` to compare cache-hit texture data. Both add substantial overhead and are intended for a short reproduction, not routine testing. Restore `Verify=0` afterward and restart.
+Optional integrity checks are separate from ordinary play: set `[LooseFiles] Verify=1` to hash every loose asset open, or `[MipCache] Verify=1` to check disk-cache source bytes and checksums and compare uploaded texture data. Both add substantial overhead and are intended for a short reproduction, not routine testing. Restore `Verify=0` afterward and restart. Prepare / Resume always performs full cache-content checks, regardless of this setting.
 
 ## If something goes wrong
 
@@ -87,4 +87,4 @@ If an unknown `dinput8.dll` is detected, do not replace it. Resolve the mod conf
 - Checks cover selected scenes and file integrity. They do not establish
   correctness throughout a full playthrough, a clean game exit, or the same
   performance on another PC. Loader logs alone do not measure physical disk reads.
-- `Verify=0` does not perform per-hit byte comparison, and `LooseFiles.Verify=0` does not detect same-size edits.
+- `[MipCache] Verify=0` keeps size and texture-layout checks but can miss corruption that changes texture pixels. It skips stored-source reads, record checksums and GPU readback comparison. `LooseFiles.Verify=0` does not detect same-size edits.

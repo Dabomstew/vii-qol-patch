@@ -20,25 +20,69 @@ int wmain(int argc,wchar_t** argv) {
     D3D11_TEXTURE2D_DESC desc{};desc.Width=desc.Height=8;desc.MipLevels=desc.ArraySize=1;
     desc.Format=DXGI_FORMAT_BC1_UNORM;desc.SampleDesc.Count=1;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
     Digest identity{};identity[0]=9;TextureDisk disk;std::vector<unsigned char> out;TextureUpload upload;
+    auto readBoth=[&](TextureBytes input,bool expected){
+        for(bool verify:{false,true})assert(disk.Read(input,out,upload,verify)==expected);
+    };
     assert(!disk.Open(L"relative",identity));
     assert(disk.Open(path,identity));
-    assert(!disk.Read(source,out,upload));assert(disk.Write(source,source,desc));
+    readBoth(source,false);assert(disk.Write(source,source,desc));
     assert(disk.Write(source,source,desc));assert(disk.Read(source,out,upload));assert(out==source);
+    readBoth(source,true);assert(out==source);
     assert(upload.desc.Width==8 && upload.slices.size()==1);
     TextureDisk other;assert(!other.Open(path,identity)); // exclusive bounded writer
-    auto changed=source;changed.back()=1;assert(!disk.Read(changed,out,upload));
-    auto wrong=identity;wrong[0]=10;assert(disk.Open(path,wrong));assert(!disk.Read(source,out,upload));
+    auto changed=source;changed.back()=1;readBoth(changed,false);
+    auto wrong=identity;wrong[0]=10;assert(disk.Open(path,wrong));readBoth(source,false);
     assert(disk.Open(path,identity));
     for(unsigned i=0;i<20;++i){changed.back()=static_cast<unsigned char>(i);assert(disk.Write(changed,source,desc));}
     assert(disk.Read(source,out,upload));
     auto file=disk.Path(source);
-    {std::fstream f(file,std::ios::binary|std::ios::in|std::ios::out);f.seekp(100);f.put('x');}
-    assert(!disk.Read(source,out,upload)); // whole-record checksum/exact source corruption
+    constexpr size_t headerSize=88; // VMT2 fixture layout; no format migration.
+    auto flip=[&](size_t at){
+        std::fstream f(file,std::ios::binary|std::ios::in|std::ios::out);assert(f);
+        f.seekg(at);char value=0;f.get(value);assert(f);f.seekp(at);f.put(value^1);assert(f);
+    };
+    auto setWord=[&](size_t at,uint32_t value){
+        std::fstream f(file,std::ios::binary|std::ios::in|std::ios::out);assert(f);
+        f.seekp(at);f.write(reinterpret_cast<const char*>(&value),sizeof(value));assert(f);
+    };
+    flip(headerSize+12); // stored source differs, generated DDS is intact
+    assert(!disk.Read(source,out,upload)); // default stays strict for preparation
+    assert(!disk.Read(source,out,upload,true));
+    assert(disk.Read(source,out,upload,false));assert(out==source);
+    assert(disk.Write(source,source,desc));
+    flip(headerSize+source.size()*2); // digest only
+    assert(!disk.Read(source,out,upload,true));
+    assert(disk.Read(source,out,upload,false));assert(out==source);
+    assert(disk.Write(source,source,desc));
+    flip(headerSize+source.size()*2-1); // changed pixel bytes remain structurally valid
+    assert(!disk.Read(source,out,upload,true));
+    assert(disk.Read(source,out,upload,false));changed=source;changed.back()^=1;assert(out==changed);
+    // Both modes retain namespace, lengths, descriptor and DDS upload bounds.
+    for(const auto& field:std::vector<std::pair<size_t,uint32_t>>{
+        {0,0}, {4,uint32_t(source.size()+1)}, {8,127}, {8,uint32_t(TextureMaxBytes+1)},
+        {44,9}, {headerSize+source.size(),0}, {headerSize+source.size()+16,9}}){
+        assert(disk.Write(source,source,desc));setWord(field.first,field.second);readBoth(source,false);
+    }
+    assert(disk.Write(source,source,desc));flip(12);readBoth(source,false); // header identity
+    assert(disk.Write(source,source,desc));
+    setWord(52,2);setWord(headerSize+source.size()+28,2);readBoth(source,false); // missing mip bytes
+    assert(disk.Write(source,source,desc));
+    {std::ofstream f(file,std::ios::binary|std::ios::app);f.put('x');}
+    readBoth(source,false); // surplus bytes
+    assert(disk.Write(source,source,desc));
+    {HANDLE f=CreateFileW(file.c_str(),GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
+        assert(f!=INVALID_HANDLE_VALUE);LARGE_INTEGER end{};end.QuadPart=headerSize+source.size()*2+31;
+        assert(SetFilePointerEx(f,end,nullptr,FILE_BEGIN)&&SetEndOfFile(f));CloseHandle(f);}
+    readBoth(source,false); // missing final digest byte, even when digest is skipped
     {std::ofstream f(file,std::ios::binary|std::ios::trunc);f.put('x');}
-    assert(!disk.Read(source,out,upload)); // truncated record
+    readBoth(source,false); // truncated header
     assert(disk.Write(source,source,desc));assert(disk.Read(source,out,upload));assert(out==source);
     {std::ofstream f(file+L".part");f<<"interrupted";}
     assert(disk.Read(source,out,upload));assert(disk.Write(source,source,desc));
     auto invalid=desc;invalid.Width=9;assert(!disk.Write(source,source,invalid));assert(disk.Read(source,out,upload));
-    std::cout<<"Texture disk guards passed: roundtrip, exact source, identity, exclusivity, unlimited retention, corruption/truncation repair, interrupted publication, invalid upload rejection\n";
+    // Exercise the seek and strict chunked comparison beyond the 64 KiB buffer.
+    auto large=source;large.resize(65536+160,0x5a);assert(disk.Write(large,source,desc));
+    readBoth(large,true);assert(out==source);file=disk.Path(large);flip(headerSize+65536);
+    assert(!disk.Read(large,out,upload,true));assert(disk.Read(large,out,upload,false));assert(out==source);
+    std::cout<<"Texture disk guards passed: strict/default and trusted reads, skipped source/digest, content-key isolation, namespace, size/layout rejection, large-source seek, repair, atomic publication\n";
 }

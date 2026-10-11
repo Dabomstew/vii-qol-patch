@@ -1,5 +1,6 @@
 """Exercise optional DLC preparation end to end in an isolated game fixture."""
 import hashlib
+import configparser
 import json
 import os
 import shutil
@@ -57,12 +58,28 @@ def main():
     game, assets, cache = root/'game', root/'loose', root/'cache'
     (game/'CONTENTS').mkdir(parents=True)
     shutil.copyfile(EXE, game/'NeptuniaVII.exe')
-    (game/'vii-patches.ini').write_text('[LooseFiles]\nDirectory='+str(assets)+'\n')
+    (game/'vii-patches.ini').write_text('[LooseFiles]\nDirectory='+str(assets)+'\n[MipCache]\nVerify=0\n')
     pac(game/'CONTENTS/GAME00000.pac', tid((255, 0, 0, 255)))
     first = run(game, cache)
     assert first['generated'] == 1 and first['unsupported'] == 0
+    installed = configparser.ConfigParser()
+    raw = (game/'vii-patches.ini').read_bytes()
+    installed.read_string(raw.decode('utf-16' if raw.startswith(b'\xff\xfe') else 'utf-8'))
+    assert all(installed.getint(section, 'Verify') == 0 for section in ('MipCache', 'LooseFiles'))
     assert not Path(str(assets)+'.dlc').exists()
     assert run(game, cache)['generated'] == 0
+    # Preparation must still repair content corruption with runtime Verify=0.
+    records = list(cache.rglob('*.vmt'))
+    assert len(records) == 1
+    record = records[0]
+    original = record.read_bytes()
+    for offset in (88, len(original)-33, len(original)-1):  # source, pixels, digest
+        damaged = bytearray(original)
+        damaged[offset] ^= 1
+        record.write_bytes(damaged)
+        repaired = run(game, cache)
+        assert repaired['generated'] == 1 and repaired['reused'] == 0
+        assert record.read_bytes() == original
     (game/'DLC').mkdir()
     pac(game/'DLC/GAME00000.pac', tid((0, 255, 0, 255)))
     added = run(game, cache)
@@ -85,6 +102,7 @@ def main():
     assert sha(game/'NeptuniaVII.exe') == BASELINE
     result = {'fixture': str(root), 'absent_dlc_succeeds': True, 'automatic_dlc_discovery': True,
               'base_and_dlc_prepared': True, 'resume_reuses_both': True,
+              'verify0_preparation_repairs_source_pixels_digest': True,
               'removed_dlc_not_scanned': True, 'reappearing_dlc_reused': True,
               'same_namespace_extractions_separate': True, 'bad_dlc_preserves_installation': True}
     (root/'result.json').write_text(json.dumps(result, indent=2)+'\n')

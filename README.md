@@ -1,6 +1,6 @@
 # VII QoL Patch
 
-Version **0.2.3**.
+Version **0.2.4**.
 
 A Windows patch for **Megadimension Neptunia VII**. Prepare Game builds a
 texture cache and unpacks game assets before you play. The patch reuses that

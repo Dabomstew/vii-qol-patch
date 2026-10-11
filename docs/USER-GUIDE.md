@@ -148,6 +148,7 @@ The release defaults are:
 | `[MipCache] BudgetMiB` / `MaxEntries` | `256` / `512` | Bounds the in-process texture cache. |
 | `[MipCache] DiskMode` | `2` | Read and write persistent cache records. |
 | `[MipCache] DiskDirectory` | `vii-speedrun-patch\cache` | Persistent cache location. |
+| `[MipCache] Verify` | `0` | Skips stored-source reads and cache checksums for faster disk-cache hits; keeps size and texture-layout checks. Set `1` for full content checks and GPU readback comparison. Prepare / Resume always checks cache contents. |
 | `[Patches] MotionCache` | `1` | Enables the replay motion cache. |
 | `[MotionCache] Mode` / `BudgetMiB` | `Replay` / `16` | Replays cached motion data within a 16 MiB budget. |
 | `[Patches] LooseFiles` | `1` | Loads checked unpacked assets; uses the game's normal loader if they cannot be used. |
@@ -173,6 +174,8 @@ The release defaults are:
 | `[MipCache] Trace` / `CaptureSources` | `0` / `0` | Opt-in diagnostics; source capture is off by default. |
 
 An explicit custom `DiskDirectory` or `LooseFiles.Directory` is preserved when Prepare Game updates an existing managed installation. Keep the base unpacked folder and its derived `.dlc` folder together when moving them. Do not edit extracted files: invalid files use the original loader, and `Verify=0` cannot detect same-size edits.
+
+Prepare Game leaves both verification options off unless they are already enabled in your existing `vii-patches.ini`. Installing, updating or saving feature choices preserves your explicit verification settings; missing options are set to `0`.
 
 ### LiveSplit New Game start
 

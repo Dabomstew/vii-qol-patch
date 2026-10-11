@@ -16,7 +16,9 @@ public:
     TextureDisk& operator=(const TextureDisk&)=delete;
     bool Open(const std::wstring&,const Digest&);
     std::wstring Path(TextureBytes) const;
-    bool Read(TextureBytes,std::vector<unsigned char>&,TextureUpload&);
+    // Preparation defaults to full content validation. Runtime Verify=0 skips
+    // stored-source reads and the record checksum, retaining size/layout guards.
+    bool Read(TextureBytes,std::vector<unsigned char>&,TextureUpload&,bool verifyContents=true);
     bool Write(TextureBytes,TextureBytes,const D3D11_TEXTURE2D_DESC&);
 };
 }

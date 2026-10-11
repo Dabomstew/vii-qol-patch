@@ -150,8 +150,14 @@ void StageSettings(const fs::path& game, const Settings& settings, const fs::pat
         if (Has(staged, obsolete.first, obsolete.second))
             Need(WritePrivateProfileStringW(obsolete.first, obsolete.second, nullptr, Native(staged).c_str()) != 0,
                  "Cannot remove obsolete setting");
-    for (const auto& d : defaults)
-        if (!Has(staged, d.section.c_str(), d.key.c_str())) Set(staged, d.section.c_str(), d.key.c_str(), d.value);
+    for (const auto& d : defaults) {
+        // Verification is opt-in in the user's existing profile, even if a
+        // bundled template accidentally enables it. Keep every explicit choice.
+        if (!_wcsicmp(d.key.c_str(), L"Verify") && !Has(config, d.section.c_str(), d.key.c_str()))
+            Set(staged, d.section.c_str(), d.key.c_str(), L"0");
+        else if (!Has(staged, d.section.c_str(), d.key.c_str()))
+            Set(staged, d.section.c_str(), d.key.c_str(), d.value);
+    }
     for (size_t i = 0; i < Features.size(); ++i)
         if (Enabled(staged, Features[i]) != settings.enabled[i])
             Set(staged, L"Patches", Features[i].key, settings.enabled[i] ? L"1" : L"0");

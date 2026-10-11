@@ -1,9 +1,12 @@
 """Settings contracts on copied baselines; never launch a game."""
 import json
+import ctypes
+from ctypes import wintypes
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from prepare_transaction_test import Transactions, ROOT, ini
@@ -15,6 +18,53 @@ class Settings(Transactions):
 
     def backups(self):
         return sorted(p.name for p in (self.game / 'vii-prepare-backups').glob('*'))
+
+    def test_verification_requires_existing_config_choice(self):
+        config = self.game / 'vii-patches.ini'
+        cases = [('', (0, 0)), ('[CustomSection]\nKeep=yes\n', (0, 0))]
+        cases.append(('[mipcache]\nvErIfY=1\n[loosefiles]\nverify=0\n', (1, 0)))
+        for mip, loose in ((None, 0), (0, 0), (1, None), (0, 1), (1, 0), (1, 1)):
+            text = ''.join(f'[{section}]\nVerify={value}\n' for section, value in
+                           (('MipCache', mip), ('LooseFiles', loose)) if value is not None)
+            cases.append((text, (mip or 0, loose or 0)))
+        for action in ('--install', '--enable-only'):
+            for text, expected in cases:
+                with self.subTest(action=action, text=text):
+                    config.write_text(text, encoding='utf-16')
+                    self.run_app(action, '--set', 'MipCache=1', '--set', 'LooseFiles=1')
+                    parsed = ini(config)
+                    sections = {section.casefold(): section for section in parsed.sections()}
+                    self.assertEqual(tuple(parsed.getint(sections[section.casefold()], 'Verify')
+                                           for section in ('MipCache', 'LooseFiles')), expected)
+
+    def test_enabled_bundled_verification_is_never_a_default(self):
+        # Inject template drift into an isolated preparer, not a shipping file.
+        from prepare_transaction_test import APP
+        app = self.work / 'enabled-template.exe'
+        shutil.copyfile(APP, app)
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.BeginUpdateResourceW.argtypes = [wintypes.LPCWSTR, wintypes.BOOL]
+        kernel.BeginUpdateResourceW.restype = wintypes.HANDLE
+        kernel.UpdateResourceW.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p,
+                                          wintypes.WORD, ctypes.c_void_p, wintypes.DWORD]
+        kernel.EndUpdateResourceW.argtypes = [wintypes.HANDLE, wintypes.BOOL]
+        handle = kernel.BeginUpdateResourceW(str(app), False)
+        self.assertTrue(handle)
+        template = (ROOT / 'native/vii-patches.ini').read_bytes().replace(b'Verify=0', b'Verify=1')
+        data = ctypes.create_string_buffer(template)
+        ok = kernel.UpdateResourceW(handle, ctypes.c_void_p(10), ctypes.c_void_p(103),
+                                    1033, data, len(template))
+        self.assertTrue(kernel.EndUpdateResourceW(handle, not ok) and ok)
+        config = self.game / 'vii-patches.ini'
+        for existing, expected in ((None, 0), ('[MipCache]\nVerify=0\n', 0), ('[MipCache]\nVerify=1\n', 1)):
+            if existing is not None:
+                config.write_text(existing, encoding='utf-16')
+            result = subprocess.run([app, '--source', self.game, '--install'], capture_output=True,
+                                    text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            parsed = ini(config)
+            self.assertEqual(parsed.getint('MipCache', 'Verify'), expected)
+            self.assertEqual(parsed.getint('LooseFiles', 'Verify'), 0)
 
     def test_selection_refuses_unsupported_executable_without_writes(self):
         exe = self.game / 'NeptuniaVII.exe'

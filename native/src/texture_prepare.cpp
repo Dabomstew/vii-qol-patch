@@ -73,7 +73,7 @@ Result Build(const fs::path& assets,const fs::path& cache,const Report& report,c
             progress.current=L"Preparing "+relative.wstring()+L" ("+std::to_wstring(result.generated)+L" generated, "+std::to_wstring(result.reused)+L" reused)";if(report)report(progress);
             try{
                 std::vector<unsigned char> existing;TextureUpload upload;
-                if(disk[source.singleMip].Read(source.dds,existing,upload)){++result.reused;record("reused",relative,source.offset,source.image,hash,"");return;}
+                if(disk[source.singleMip].Read(source.dds,existing,upload,true)){++result.reused;record("reused",relative,source.offset,source.image,hash,"");return;}
                 TextureLoadInfo options;if(source.singleMip)options.fields[4]=1;ComPtr<ID3D11Resource> original,replay;
                 HRESULT created=create(device.Get(),source.dds.data(),source.dds.size(),&options,nullptr,&original,nullptr);
                 if(FAILED(created)||!original)throw std::runtime_error("D3DX generation failed");

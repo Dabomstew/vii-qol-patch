@@ -96,7 +96,7 @@ __declspec(noinline) static HRESULT WINAPI Create(ID3D11Device* device,const voi
         for(auto it=s.entries.begin();it!=s.entries.end();++it)if(it->recipe==recipe&&it->source.size()==size&&!memcmp(it->source.data(),source,size)){
             s.bytes-=it->Cost();entry=std::move(*it);s.entries.erase(it);hit=true;request.event="ram_hit";break;}
         if(!hit&&s.diskMode){
-            try{hit=s.disk[recipe].Read({source,size},entry.diskDds,entry.upload);}catch(const std::exception& e){Log("MipCache disk read failed: %s",e.what());}
+            try{hit=s.disk[recipe].Read({source,size},entry.diskDds,entry.upload,s.verify);}catch(const std::exception& e){Log("MipCache disk read failed: %s",e.what());}
             if(hit){++s.diskHits;request.event="disk_hit";Log("MipCache disk_hit count=%llu source_bytes=%zu",s.diskHits,size);}
         }
         if(hit){
