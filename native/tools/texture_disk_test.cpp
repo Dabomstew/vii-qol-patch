@@ -7,6 +7,7 @@ namespace vii {
 bool InstallNeptasm(const Context&){return false;}
 bool InstallNewGameDetector(const Context&){return false;}
 bool InstallLoadTiming(const Context&){return false;}
+bool InstallSkipBattleLoadingPresent(const Context&){return false;}
 bool InstallSuppressDungeonPreview(const Context&){return false;}
 bool InstallJPBattleBalance(const Context&){return false;}
 bool InstallMipCache(const Context&){return false;} bool InstallMotionCache(const Context&){return false;}
