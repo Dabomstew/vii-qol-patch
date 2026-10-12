@@ -9,4 +9,5 @@ assert parser.getint("Patches", "Neptasm") == 0
 for key in ("FPSUnlock", "CameraUnlock", "Resolution", "FitWindow", "WindowControl", "Ultrawide"):
     assert parser.getint("Neptasm", key) == 0, key
 assert parser.get("Neptasm", "ResolutionScale") == "1.0"
+assert parser.getint("Neptasm", "RenderWidth") == parser.getint("Neptasm", "RenderHeight") == 0
 print("neptasm defaults: all opt-in controls are present and disabled")

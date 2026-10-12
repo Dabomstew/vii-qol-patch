@@ -90,10 +90,15 @@ settings. This does not scan textures, extract archives, or launch the game.
 Repeating an unchanged update keeps the previous update backup.
 Use **Prepare / Resume** when you want to extract assets and prebuild textures.
 
-The window loads the prepared loading options, **Unlock FPS during loads**, and
-five optional gameplay choices from the existing INI. Prepared loading
-improvements default on; FPS unlock and gameplay changes default off. Explicit
+The window loads the prepared loading options, **Unlock FPS during loads**,
+**Reduce battle loading frames**, and optional gameplay choices from the existing
+INI. Prepared loading improvements and **Reduce battle loading frames** default on;
+FPS unlock during loads and gameplay choices default off. Explicit
 existing choices, including disabled loading options, are retained.
+**Reduce battle loading frames** updates the picture less often while battle
+characters load. Normal picture updates resume before battle commands become
+available. Loading continues throughout; this can help PCs that stall while
+presenting loading frames. Restart the game after changing the option.
 **Reload settings** reads the current file. If you have unsaved changes, choose
 **Discard changes** to reload or **Stay** to keep editing. The same prompt appears
 when changing the game folder, closing or starting maintenance. If the INI changes while
@@ -167,7 +172,8 @@ The release defaults are:
 | `[Patches] SuppressTutorials` | `0` | Suppresses automatic Teach Me Histy tutorials when enabled. |
 | `[Patches] Neptasm` | `0` | Enables the compatibility layer for neptasm's graphics controls; each control below remains off until explicitly enabled. |
 | `[Neptasm] FPSUnlock` / `CameraUnlock` | `0` / `0` | Removes the stock frame-time cap and expands the camera angle range. |
-| `[Neptasm] Resolution` / `ResolutionScale` | `0` / `1.0` | Scales supported 1920x1080 render targets by the selected multiplier. |
+| `[Neptasm] Resolution` / `RenderWidth` / `RenderHeight` | `0` / `0` / `0` | Sets a fixed internal rendering size. Choose **Render resolution** in Prepare Game to set dimensions and enable the required controls together. The window size stays the same. |
+| `[Neptasm] ResolutionScale` | `1.0` | With `Resolution=1` and no valid fixed dimensions, changes rendering size relative to the output. `0.5` halves width and height. |
 | `[Neptasm] FitWindow` | `0` | Uses the window client area for the Direct3D swap-chain size. |
 | `[Neptasm] WindowControl` / `WindowWidth` / `WindowHeight` | `0` / `1920` / `1080` | Replaces the ten built-in window-size choices with one configured size. |
 | `[Neptasm] Ultrawide` | `0` | Expands the game's 16:9 view to the selected output size; some menus and effects may still assume 16:9. |
@@ -204,6 +210,16 @@ queue fall back to ordinary input for that dialog.
 
 ### Optional neptasm graphics controls
 
+Choose **Render resolution** in Prepare Game, then **Install / Update** or **Play**.
+The dropdown offers common sizes from 640×360 to 3840×2160 and starts at **Disabled**.
+Selecting a size enables resolution control and its Neptasm layer together.
+The internal image uses that size while the window keeps its existing dimensions.
+Lower resolutions make the image softer, including some interface elements;
+some effects keep their original rendering size. Restart to apply changes.
+Choose **Disabled** to turn off this resolution control; other graphics settings
+are kept. Existing custom dimensions or scaling appear as **Custom (keep current
+settings)** and stay unchanged until you choose a preset or Disabled.
+
 The neptasm compatibility layer is an optional graphics experiment, not part
 of the prepared-cache profile. Leave `[Patches] Neptasm=0` for ordinary play.
 Setting it to `1` makes the `[Neptasm]` controls available, but does not enable
@@ -211,8 +227,8 @@ Setting it to `1` makes the `[Neptasm]` controls available, but does not enable
 `Ultrawide` by itself. Enable and test one control at a time, then restart the
 game after every edit.
 
-For example, to use a custom window size, enable both the layer and the window
-control:
+For example, to use a custom size in windowed mode, enable both the layer and
+the window control. The size applies when the game starts:
 
 ```ini
 [Patches]
@@ -224,7 +240,10 @@ WindowWidth=2560
 WindowHeight=1440
 ```
 
-`ResolutionScale` only applies when `Resolution=1`; `WindowWidth` and
+With `Resolution=1`, a positive `RenderWidth`/`RenderHeight` pair up to 16384 per
+dimension takes precedence over `ResolutionScale`, independently of the output
+size. Set both to `0` for the existing scale behavior; an invalid or incomplete
+pair also falls back to the scale. `WindowWidth` and
 `WindowHeight` only apply when `WindowControl=1`. `Ultrawide=1` expands the
 game's 16:9 view, but some menus and effects can still
 use the original layout assumptions. If the display is clipped, misaligned,
@@ -232,6 +251,10 @@ black, or otherwise incorrect, set `[Patches] Neptasm=0`, restart, and report
 the exact display configuration rather than layering multiple graphics
 options together. Suggested testing steps are in
 [TESTING.md](TESTING.md).
+
+Lower render scales make the image softer, including some interface elements.
+Some effects keep their original rendering size. Restart after changing the
+scale; it takes effect when the game creates its graphics device.
 
 ## Diagnostics and feedback
 

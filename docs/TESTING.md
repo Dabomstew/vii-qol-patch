@@ -93,5 +93,30 @@ Texture-cache success messages require `[MipCache] Trace=1`. With Trace=0,
 missing hit messages do not mean the cache is unused. `[EventSkipBuffer] Trace=1`
 enables ordered keyboard diagnostics. Use tracing only for a short reproduction.
 
-Optional graphics settings may fail to take effect on some launches. This
-remains under investigation. Leave them disabled if they do not work as expected.
+The neptasm controls have been checked through startup, New Game event transitions
+and dungeon movement, individually and together. Checks cover the FPS gate,
+camera-limit loads, scaled/fixed rendering, custom window sizing, FitWindow and
+ultrawide output. Screenshots and actual render targets/viewports were inspected;
+half-scale rendering keeps the window size unchanged. The camera access violation
+and custom window size not applying at startup are fixed in 0.2.6.
+Menus, battles, other display modes and graphics drivers still need broader
+coverage. Leave optional graphics controls disabled if they do not work as expected.
+
+## Fixed render resolution
+
+In Prepare Game, choose **Render resolution**, then **Install / Update**. Check
+that the saved selection returns after reopening the preparer. The window size
+should stay the same when starting the game. Try **Disabled** afterward and
+confirm ordinary rendering returns. Lower sizes soften the scene and some text;
+report clipping, misaligned menus or black areas with the selected resolution
+and your window size. Loading speed and GPU benefits need separate comparisons.
+
+## Camera unlock regression
+
+The native regression test executes both patched camera-limit loads after
+installation returns, verifies their values and checks disabled behavior and
+signature refusal. Before the fix, these loads raised access violations by using
+floating-point bits as memory addresses. This isolated test does not establish
+full-playthrough camera coverage. A live camera-only run and a combined graphics
+run also executed both camera-limit loads during dungeon movement without an
+observed access violation.

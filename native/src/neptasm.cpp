@@ -13,6 +13,7 @@ struct Settings {
     bool fps = false, camera = false, resolution = false, fitWindow = false;
     bool windowControl = false, ultrawide = false;
     unsigned windowWidth = 1920, windowHeight = 1080;
+    unsigned renderWidth = 0, renderHeight = 0;
     float scale = 1.0f;
 };
 struct State {
@@ -27,13 +28,12 @@ struct State {
     float aspect = 1920.0f / 1080.0f;
     ID3D11Device* device = nullptr;
     ID3D11DeviceContext* contextObject = nullptr;
-    ID3D11DeviceContext* originalContext = nullptr;
-    ID3D11Device* originalDevice = nullptr;
     IDXGISwapChain* swapChain = nullptr;
     void** deviceVtable = nullptr;
     void** contextVtable = nullptr;
+    bool comActive = false;
 };
-State* state = nullptr; // pinned for process lifetime; COM objects own the vtables.
+State* state = nullptr; // proxy and hook state are pinned for process lifetime.
 
 using CreateDeviceFn = HRESULT (WINAPI*)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
     const D3D_FEATURE_LEVEL*, UINT, UINT, const DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**,
@@ -45,6 +45,10 @@ CreateDeviceFn originalCreate = nullptr;
 CreateTextureFn originalTexture = nullptr;
 ViewportFn originalViewport = nullptr;
 float fpsMax = 1024.0f;
+// The patched MOVSS instructions use absolute memory operands, not immediates.
+// Their pointees must remain alive for every camera update in the process.
+const float cameraMax = 270.0f;
+const float cameraMin = 90.0f;
 uintptr_t fpsReturn = 0;
 float aspectRatio = 16.0f / 9.0f;
 bool aspectPatched = false;
@@ -77,6 +81,11 @@ unsigned ClampDimension(float value, unsigned fallback) {
     if (!std::isfinite(value) || value < 1.0f || value > 16384.0f) return fallback;
     return static_cast<unsigned>(value + 0.5f);
 }
+bool SetFixedRenderSize(Settings& s, int width, int height) {
+    s.renderWidth = s.renderHeight = 0;
+    if (width <= 0 || width > 16384 || height <= 0 || height > 16384) return false;
+    s.renderWidth = unsigned(width); s.renderHeight = unsigned(height); return true;
+}
 void Recompute() {
     auto& s = *state;
     const unsigned w = s.settings.fitWindow ? (s.outputWidth ? s.outputWidth : 1920) :
@@ -86,21 +95,27 @@ void Recompute() {
     const bool changeRender = s.settings.resolution || s.settings.fitWindow || s.settings.ultrawide;
     s.renderWidth = changeRender ? ClampDimension(float(w) * (s.settings.resolution ? s.settings.scale : 1.0f), w) : s.sourceWidth;
     s.renderHeight = changeRender ? ClampDimension(float(h) * (s.settings.resolution ? s.settings.scale : 1.0f), h) : s.sourceHeight;
+    // A valid explicit pair overrides the legacy multiplier, independently of
+    // output/window size. Zero or an invalid pair retains legacy behavior.
+    if (s.settings.resolution && s.settings.renderWidth && s.settings.renderHeight) {
+        s.renderWidth = s.settings.renderWidth; s.renderHeight = s.settings.renderHeight;
+    }
     s.uiWidth = s.renderWidth;
     s.uiHeight = s.renderHeight;
     s.aspect = s.renderHeight ? float(s.renderWidth) / float(s.renderHeight) : 16.0f / 9.0f;
 }
 template<class T> T Original(void** table, unsigned slot) { return reinterpret_cast<T>(table[slot]); }
-void** CloneVtable(IUnknown* object, size_t entries) {
-    auto table = static_cast<void**>(VirtualAlloc(nullptr, entries * sizeof(void*), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-    if (!table) return nullptr;
-    std::memcpy(table, *reinterpret_cast<void***>(object), entries * sizeof(void*));
-    *reinterpret_cast<void***>(object) = table;
-    return table;
+bool ReplaceMethod(void** slot, void* expected, void* replacement) {
+    DWORD protection = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &protection)) return false;
+    const auto previous = InterlockedCompareExchangePointer(slot, replacement, expected);
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), protection, &ignored);
+    return previous == expected;
 }
 HRESULT STDMETHODCALLTYPE CreateTexture(ID3D11Device* device, const D3D11_TEXTURE2D_DESC* desc,
     const D3D11_SUBRESOURCE_DATA* initial, ID3D11Texture2D** output) {
-    if (state && (state->settings.resolution || state->settings.fitWindow || state->settings.ultrawide) && InGame(reinterpret_cast<uintptr_t>(_ReturnAddress())) && desc && !initial && desc->Width == state->sourceWidth &&
+    if (state && state->comActive && device == state->device && (state->settings.resolution || state->settings.fitWindow || state->settings.ultrawide) && InGame(reinterpret_cast<uintptr_t>(_ReturnAddress())) && desc && !initial && desc->Width == state->sourceWidth &&
         desc->Height == state->sourceHeight && desc->SampleDesc.Count == 1 && desc->Usage != D3D11_USAGE_DYNAMIC &&
         (desc->Format == DXGI_FORMAT_R8G8B8A8_UNORM || desc->Format == DXGI_FORMAT_D32_FLOAT || desc->Format == DXGI_FORMAT_R32_FLOAT)) {
         auto changed = *desc;
@@ -110,7 +125,7 @@ HRESULT STDMETHODCALLTYPE CreateTexture(ID3D11Device* device, const D3D11_TEXTUR
     return originalTexture(device, desc, initial, output);
 }
 void STDMETHODCALLTYPE Viewport(ID3D11DeviceContext* context, UINT count, const D3D11_VIEWPORT* viewports) {
-    if (!state || !(state->settings.resolution || state->settings.fitWindow || state->settings.ultrawide) ||
+    if (!state || !state->comActive || context != state->contextObject || !(state->settings.resolution || state->settings.fitWindow || state->settings.ultrawide) ||
         !InGame(reinterpret_cast<uintptr_t>(_ReturnAddress())) || count != 1 || !viewports) {
         originalViewport(context, count, viewports); return;
     }
@@ -134,24 +149,34 @@ bool PatchAspect(const Context& context, float ratio);
 
 bool InstallComHooks(IDXGISwapChain* chain, ID3D11Device* device, ID3D11DeviceContext* context) {
     if (!chain || !device || !context) return false;
+    state->comActive = false;
     state->swapChain = chain; state->device = device; state->contextObject = context;
     state->sourceWidth = 1920; state->sourceHeight = 1080;
     DXGI_SWAP_CHAIN_DESC desc{}; if (SUCCEEDED(chain->GetDesc(&desc)) && desc.BufferDesc.Width && desc.BufferDesc.Height) {
         state->outputWidth = desc.BufferDesc.Width; state->outputHeight = desc.BufferDesc.Height;
     }
     Recompute();
-    state->deviceVtable = CloneVtable(device, 43); state->contextVtable = CloneVtable(context, 51);
-    if (!state->deviceVtable || !state->contextVtable) return false;
-    originalTexture = Original<CreateTextureFn>(state->deviceVtable, 5);
-    originalViewport = Original<ViewportFn>(state->contextVtable, 44);
-    // Only these two methods alter rendering. Leave swap-chain operations,
-    // render-target binding, view creation and clears on their original paths.
-    state->deviceVtable[5] = reinterpret_cast<void*>(CreateTexture);
-    state->contextVtable[44] = reinterpret_cast<void*>(Viewport);
-    DWORD ignored = 0;
-    VirtualProtect(state->deviceVtable, 43 * sizeof(void*), PAGE_READONLY, &ignored);
-    VirtualProtect(state->contextVtable, 51 * sizeof(void*), PAGE_READONLY, &ignored);
-    return originalTexture && originalViewport;
+    // Retain the runtime's complete tables, including newer/private interface
+    // entries. A base-interface shadow table truncates what D3D itself uses.
+    // Shared tables are safe here: wrappers also require the selected object
+    // and a caller in the validated game image before changing any arguments.
+    state->deviceVtable = *reinterpret_cast<void***>(device);
+    state->contextVtable = *reinterpret_cast<void***>(context);
+    const auto texture = Original<CreateTextureFn>(state->deviceVtable, 5);
+    const auto viewport = Original<ViewportFn>(state->contextVtable, 44);
+    if (texture == CreateTexture && viewport == Viewport) {
+        state->comActive = originalTexture && originalViewport;
+        return state->comActive;
+    }
+    if (!texture || !viewport || texture == CreateTexture || viewport == Viewport) return false;
+    originalTexture = texture; originalViewport = viewport;
+    if (!ReplaceMethod(state->deviceVtable + 5, reinterpret_cast<void*>(texture), reinterpret_cast<void*>(CreateTexture))) return false;
+    if (!ReplaceMethod(state->contextVtable + 44, reinterpret_cast<void*>(viewport), reinterpret_cast<void*>(Viewport))) {
+        ReplaceMethod(state->deviceVtable + 5, reinterpret_cast<void*>(CreateTexture), reinterpret_cast<void*>(texture));
+        return false;
+    }
+    state->comActive = originalTexture && originalViewport;
+    return state->comActive;
 }
 
 HRESULT WINAPI CreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE type, HMODULE software, UINT flags,
@@ -159,8 +184,26 @@ HRESULT WINAPI CreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE type, HMODULE
     IDXGISwapChain** chain, ID3D11Device** device, D3D_FEATURE_LEVEL* feature, ID3D11DeviceContext** context) {
     DXGI_SWAP_CHAIN_DESC adjusted{};
     const DXGI_SWAP_CHAIN_DESC* effective = swapDesc;
+    if (state && state->settings.windowControl && swapDesc && swapDesc->Windowed && swapDesc->OutputWindow) {
+        // The game chooses its first window size before this graphics call.
+        // Updating the size table alone only affects later video selections.
+        const auto window = swapDesc->OutputWindow;
+        RECT frame{0, 0, LONG(state->settings.windowWidth), LONG(state->settings.windowHeight)};
+        const auto style = DWORD(GetWindowLongPtrW(window, GWL_STYLE));
+        const auto extended = DWORD(GetWindowLongPtrW(window, GWL_EXSTYLE));
+        RECT client{};
+        if (AdjustWindowRectEx(&frame, style, GetMenu(window) != nullptr, extended) &&
+            SetWindowPos(window, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) &&
+            GetClientRect(window, &client) && client.right > client.left && client.bottom > client.top) {
+            adjusted = *swapDesc;
+            adjusted.BufferDesc.Width = UINT(client.right - client.left);
+            adjusted.BufferDesc.Height = UINT(client.bottom - client.top);
+            effective = &adjusted;
+        } else Log("Neptasm custom window sizing failed; retaining original swap-chain dimensions");
+    }
     if (state && state->settings.fitWindow && swapDesc && swapDesc->OutputWindow) {
-        adjusted = *swapDesc; RECT client{};
+        adjusted = *effective; RECT client{};
         if (GetClientRect(swapDesc->OutputWindow, &client) && client.right > client.left && client.bottom > client.top) {
             adjusted.BufferDesc.Width = static_cast<UINT>(client.right - client.left);
             adjusted.BufferDesc.Height = static_cast<UINT>(client.bottom - client.top);
@@ -267,10 +310,11 @@ bool ApplyStatic(const Context& context, const Settings& s) {
     if (s.camera) {
         const unsigned char maxExpected[] = {0x96,0xb4,0x01,0x00,0x00}; unsigned char maxReplacement[] = {0x15,0,0,0,0};
         const unsigned char minExpected[] = {0xae,0xb8,0x01,0x00,0x00}; unsigned char minReplacement[] = {0x2d,0,0,0,0};
-        auto maxReplacementMutable = maxReplacement; auto minReplacementMutable = minReplacement;
-        const float max = 270.0f, min = 90.0f; std::memcpy(maxReplacementMutable + 1, &max, 4); std::memcpy(minReplacementMutable + 1, &min, 4);
-        ok = PatchBytes(base + 0x2c147b, maxExpected, maxReplacementMutable, sizeof(maxExpected)) && ok;
-        ok = PatchBytes(base + 0x2c1486, minExpected, minReplacementMutable, sizeof(minExpected)) && ok;
+        const uint32_t maxPointer = uint32_t(reinterpret_cast<uintptr_t>(&cameraMax));
+        const uint32_t minPointer = uint32_t(reinterpret_cast<uintptr_t>(&cameraMin));
+        std::memcpy(maxReplacement + 1, &maxPointer, 4); std::memcpy(minReplacement + 1, &minPointer, 4);
+        ok = PatchBytes(base + 0x2c147b, maxExpected, maxReplacement, sizeof(maxExpected)) && ok;
+        ok = PatchBytes(base + 0x2c1486, minExpected, minReplacement, sizeof(minExpected)) && ok;
     }
     return ok;
 }
@@ -289,11 +333,16 @@ bool InstallNeptasm(const Context& context) {
         s.ultrawide = Option(context, L"Neptasm", L"Ultrawide", 0) != 0;
         s.windowWidth = unsigned(std::clamp(Option(context, L"Neptasm", L"WindowWidth", 1920), 320, 16384));
         s.windowHeight = unsigned(std::clamp(Option(context, L"Neptasm", L"WindowHeight", 1080), 200, 16384));
+        const int renderWidth = Option(context, L"Neptasm", L"RenderWidth", 0);
+        const int renderHeight = Option(context, L"Neptasm", L"RenderHeight", 0);
+        if (!SetFixedRenderSize(s, renderWidth, renderHeight) && s.resolution && (renderWidth || renderHeight)) {
+            Log("Neptasm invalid fixed render size; using ResolutionScale");
+        }
         wchar_t scale[64]{}; GetPrivateProfileStringW(L"Neptasm", L"ResolutionScale", L"1.0", scale, 64, context.ini.c_str());
         wchar_t* end = nullptr; s.scale = wcstof(scale, &end); if (!end || *end || !std::isfinite(s.scale) || s.scale <= 0.0f || s.scale > 8.0f) s.scale = 1.0f;
         if (s.resolution && s.fitWindow) Log("Neptasm FitWindow is applied by the next swap-chain creation; WindowWidth/Height remain the fallback");
         if (!ApplyStatic(context, s)) { Log("Neptasm static patch signature mismatch; no static feature was enabled"); return false; }
-        if (!(s.resolution || s.ultrawide || s.fitWindow)) { state = candidate.release(); Log("Neptasm static features installed"); return true; }
+        if (!(s.resolution || s.ultrawide || s.fitWindow || s.windowControl)) { state = candidate.release(); Log("Neptasm static features installed"); return true; }
         state = candidate.release(); state->d3d11 = GetModuleHandleW(L"d3d11.dll");
         if (!state->d3d11) return false;
         originalCreate = reinterpret_cast<CreateDeviceFn>(GetProcAddress(state->d3d11, "D3D11CreateDeviceAndSwapChain"));

@@ -8,7 +8,7 @@ cl /nologo /std:c++17 /O2 /W4 /WX /EHsc /MT /I native\include native\tools\runti
 if errorlevel 1 exit /b 1
 build\native-build\runtime-diagnostics-test.exe "%CD%\build\runtime-diagnostics-test-%RANDOM%-%RANDOM%"
 if errorlevel 1 exit /b 1
-cl /nologo /std:c++17 /O2 /W4 /WX /EHsc /MT /I native\include native\tools\neptasm_runtime_test.cpp native\src\code_calls.cpp /Fo:build\native-build\ /Fe:build\native-build\neptasm-runtime-test.exe /link user32.lib
+cl /nologo /std:c++17 /O2 /W4 /WX /EHsc /MT /I native\include native\tools\neptasm_runtime_test.cpp native\src\code_calls.cpp /Fo:build\native-build\ /Fe:build\native-build\neptasm-runtime-test.exe /link user32.lib d3d11.lib
 if errorlevel 1 exit /b 1
 build\native-build\neptasm-runtime-test.exe
 exit /b %errorlevel%

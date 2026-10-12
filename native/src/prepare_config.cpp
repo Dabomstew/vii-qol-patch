@@ -107,6 +107,10 @@ Settings ReadSettings(const fs::path& selected) {
     result.cache = Normal(ResolveGamePath(game.wstring(), Ini(config, L"MipCache", L"DiskDirectory", CacheDefault), CacheDefault));
     result.assets = Normal(ResolveGamePath(game.wstring(), Ini(config, L"LooseFiles", L"Directory", AssetsDefault), AssetsDefault));
     for (size_t i = 0; i < Features.size(); ++i) result.enabled[i] = Enabled(config, Features[i]);
+    result.renderEnabled = GetPrivateProfileIntW(L"Patches", L"Neptasm", 0, Native(config).c_str()) != 0 &&
+        GetPrivateProfileIntW(L"Neptasm", L"Resolution", 0, Native(config).c_str()) != 0;
+    result.renderWidth = int(GetPrivateProfileIntW(L"Neptasm", L"RenderWidth", 0, Native(config).c_str()));
+    result.renderHeight = int(GetPrivateProfileIntW(L"Neptasm", L"RenderHeight", 0, Native(config).c_str()));
     Need(HashPath(config) == result.configHash, "Settings changed while being read. Choose Reload settings, or retry the command");
     return result;
 }
@@ -119,6 +123,8 @@ SettingsFile::~SettingsFile() {
 }
 std::wstring CacheText(const fs::path& config) { return Ini(config, L"MipCache", L"DiskDirectory", CacheDefault); }
 void ValidateSettings(const fs::path& game, const Settings& settings) {
+    if (settings.renderChanged)
+        Need(RenderSelection(settings) < RenderPresets.size(), "Choose a supported render resolution");
     Need(!settings.cache.empty() && !settings.assets.empty(), "Select both cache and unpacked asset folders");
     CheckOutput(game, settings.cache); CheckOutput(game, settings.assets);
     const auto dlc = loose::DlcOutput(settings.assets);
@@ -163,6 +169,13 @@ void StageSettings(const fs::path& game, const Settings& settings, const fs::pat
             Set(staged, L"Patches", Features[i].key, settings.enabled[i] ? L"1" : L"0");
     if (Ini(staged, L"MipCache", L"DiskDirectory") != cacheText) Set(staged, L"MipCache", L"DiskDirectory", cacheText);
     if (Ini(staged, L"LooseFiles", L"Directory") != assetText) Set(staged, L"LooseFiles", L"Directory", assetText);
+    if (settings.renderChanged) {
+        Set(staged, L"Neptasm", L"Resolution", settings.renderEnabled ? L"1" : L"0");
+        Set(staged, L"Neptasm", L"RenderWidth", std::to_wstring(settings.renderWidth));
+        Set(staged, L"Neptasm", L"RenderHeight", std::to_wstring(settings.renderHeight));
+        // Turning this control off must not turn off other Neptasm features.
+        if (settings.renderEnabled) Set(staged, L"Patches", L"Neptasm", L"1");
+    }
     Flush(staged);
 }
 }

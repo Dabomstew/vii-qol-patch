@@ -25,11 +25,13 @@ enum class State { Completed, Cancelled, Failed };
 struct Cancelled : std::runtime_error { using std::runtime_error::runtime_error; };
 struct PathField { std::string id; std::wstring label; fs::path value; bool editable = true; };
 struct Feature { std::string id; std::wstring label; unsigned group = 0; bool value = false; };
+struct Choice { std::string id; std::wstring label; std::vector<std::wstring> options; size_t selected = 0; };
 struct View {
     fs::path game, executable;
     std::wstring gameName, note;
     std::vector<PathField> paths;
     std::vector<Feature> features;
+    std::vector<Choice> choices;
     // Immutable backend settings/identity snapshot. The shell never interprets it.
     std::shared_ptr<const void> snapshot;
 };

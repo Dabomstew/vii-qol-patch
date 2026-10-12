@@ -13,6 +13,7 @@ struct Fake final : Adapter {
         View v; v.game = game; v.executable = game / L"fiction.exe";
         v.paths = {{"assets", L"Assets", game / L"assets"}};
         v.features = {{"load", L"Prepared loading", 0, false}};
+        v.choices = {{"quality", L"Quality", {L"Disabled", L"Low", L"High"}, 0}};
         if (game == L"fiction-b") v.features.push_back({"skip", L"Skip", 1, true});
         return v;
     }
@@ -44,6 +45,12 @@ int main() {
         assert(f.installed > 0); assert(exe == game / L"fiction.exe"); ++launches;
     });
     assert(!s.Begin(Action::Install)); s.Select(f.Open(L"fiction-a")); assert(!s.Dirty());
+    s.view.choices[0].selected = 1; assert(s.Dirty());
+    s.DiscardChoices(); assert(!s.Dirty() && s.view.choices[0].selected == 0);
+    f.fail = true; s.view.choices[0].selected = 2;
+    assert(s.Begin(Action::Install)); Wait(s);
+    assert(s.Finish().state == State::Failed && s.view.choices[0].selected == 2 && s.Dirty());
+    f.fail = false; s.DiscardChoices();
     s.view.features[0].value = true; assert(s.Dirty());
     s.DiscardChoices(); assert(!s.Dirty() && f.installed == 0);
     s.view.features[0].value = true;
@@ -64,6 +71,8 @@ int main() {
     assert(badLaunch.Finish().state == State::Failed);
     View layout = f.Open(L"fiction-b");
     assert(ContentHeight(layout, 5, 500) > ContentHeight(layout, 5, 780));
+    auto noChoices = layout; noChoices.choices.clear();
+    assert(ContentHeight(layout, 5, 780) == ContentHeight(noChoices, 5, 780) + 40);
     // Destruction requests preparation cancellation and joins a live worker.
     f.release = false;
     { Session owned(f, [](const fs::path&, const fs::path&) {}); owned.Select(f.Open(L"fiction-a")); assert(owned.Begin(Action::Prepare)); }

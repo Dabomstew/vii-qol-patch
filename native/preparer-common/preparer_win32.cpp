@@ -17,7 +17,7 @@
 namespace preparer {
 namespace {
 constexpr int GameBrowse = 101, GameSelect = 102, Reload = 103, Close = 104;
-constexpr int PathFirst = 200, FeatureFirst = 400, ActionFirst = 600;
+constexpr int PathFirst = 200, FeatureFirst = 400, ChoiceFirst = 500, ActionFirst = 600;
 constexpr UINT SelectPending = WM_APP + 1;
 struct Positioned { HWND handle; int x, y, w, h; };
 std::wstring Text(HWND h) {
@@ -55,7 +55,7 @@ struct App {
     HWND note = nullptr, status = nullptr, details = nullptr, bar = nullptr, close = nullptr, browse = nullptr;
     HWND groups[2]{}; HFONT font = nullptr, heading = nullptr;
     IAccPropServices* accessibility = nullptr;
-    std::vector<HWND> children, paths, features;
+    std::vector<HWND> children, paths, features, choices, choiceLabels;
     std::vector<std::pair<Action, HWND>> actions;
     std::vector<fs::path> detected;
     fs::path pendingSelection;
@@ -100,7 +100,7 @@ struct App {
     void Build() {
         updating = true;
         for (auto h : children) DestroyWindow(h);
-        children.clear(); paths.clear(); features.clear(); actions.clear(); positions.clear();
+        children.clear(); paths.clear(); features.clear(); choices.clear(); choiceLabels.clear(); actions.clear(); positions.clear();
         title = Control(L"STATIC", product.heading, 0);
         SendMessageW(title, WM_SETFONT, reinterpret_cast<WPARAM>(heading), TRUE);
         intro = Control(L"STATIC", product.introduction, 0);
@@ -125,6 +125,14 @@ struct App {
             Control(L"BUTTON", p.label, WS_TABSTOP, PathFirst + int(i) * 2);
             paths.push_back(Control(L"EDIT", p.value.wstring(), WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL |
                 (p.editable ? 0 : ES_READONLY), PathFirst + int(i) * 2 + 1, p.label.c_str()));
+        }
+        for (size_t i = 0; i < session.view.choices.size(); ++i) {
+            const auto& c = session.view.choices[i];
+            if (c.options.empty() || c.selected >= c.options.size()) throw std::runtime_error("Invalid preparer dropdown selection");
+            choiceLabels.push_back(Control(L"STATIC", c.label, 0));
+            auto h = Control(L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL, ChoiceFirst + int(i), c.label.c_str());
+            for (const auto& option : c.options) SendMessageW(h, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(option.c_str()));
+            SendMessageW(h, CB_SETCURSEL, c.selected, 0); choices.push_back(h);
         }
         for (unsigned g = 0; g < 2; ++g) groups[g] = Control(L"STATIC", product.groups[g], 0);
         for (size_t i = 0; i < session.view.features.size(); ++i) {
@@ -169,6 +177,10 @@ struct App {
         for (size_t i = 0; i < paths.size(); ++i) {
             Put(GetDlgItem(window, PathFirst + int(i) * 2), 22, y, 144, 30);
             Put(paths[i], 178, y, usable - 156, 30); y += 40;
+        }
+        for (size_t i = 0; i < choices.size(); ++i) {
+            Put(choiceLabels[i], 22, y, 144, 30);
+            Put(choices[i], 178, y, usable - 156, 300); y += 40;
         }
         int counts[2]{}; for (const auto& f : session.view.features) ++counts[f.group == 1 ? 1 : 0];
         const int colWidth = columns ? (usable - 18) / 2 : usable;
@@ -224,7 +236,8 @@ struct App {
     void Focus(HWND target) {
         for (const auto& p : positions) if (p.handle == target) {
             RECT r{}; GetClientRect(window, &r); const int page = MulDiv(r.bottom, 96, dpi);
-            const int actualHeight = product.multipleGames && target == game ? 30 : p.h;
+            const int actualHeight = (product.multipleGames && target == game) ||
+                std::find(choices.begin(), choices.end(), target) != choices.end() ? 30 : p.h;
             if (p.y < offset) Scroll(p.y);
             else if (p.y + actualHeight > offset + page) Scroll(p.y + actualHeight - page);
         }
@@ -235,6 +248,7 @@ struct App {
         EnableWindow(browse, !session.busy); EnableWindow(game, !session.busy);
         for (auto h : paths) EnableWindow(h, selected && !session.busy);
         for (auto h : features) EnableWindow(h, selected && !session.busy);
+        for (auto h : choices) EnableWindow(h, selected && !session.busy);
         for (size_t i = 0; i < paths.size(); ++i) EnableWindow(GetDlgItem(window, PathFirst + int(i) * 2), selected && !session.busy && session.view.paths[i].editable);
         EnableWindow(reload, selected && !session.busy);
         for (auto& a : actions) EnableWindow(a.second, session.Available(a.first));
@@ -249,6 +263,7 @@ struct App {
     void SyncPaths() {
         updating = true;
         for (size_t i = 0; i < paths.size(); ++i) SetWindowTextW(paths[i], session.view.paths[i].value.c_str());
+        for (size_t i = 0; i < choices.size(); ++i) SendMessageW(choices[i], CB_SETCURSEL, session.view.choices[i].selected, 0);
         updating = false;
     }
     void ConfirmSelection() {
@@ -288,6 +303,13 @@ struct App {
         } else if (id >= FeatureFirst && id < FeatureFirst + int(features.size()) && notification == BN_CLICKED) {
             const size_t i = size_t(id - FeatureFirst); session.view.features[i].value = SendMessageW(features[i], BM_GETCHECK, 0, 0) == BST_CHECKED;
             adapter.Changed(session.view, session.view.features[i].id); SyncPaths();
+        } else if (id >= ChoiceFirst && id < ChoiceFirst + int(choices.size()) && notification == CBN_SELCHANGE) {
+            const size_t i = size_t(id - ChoiceFirst);
+            const auto selected = SendMessageW(choices[i], CB_GETCURSEL, 0, 0);
+            if (selected >= 0 && size_t(selected) < session.view.choices[i].options.size()) {
+                session.view.choices[i].selected = size_t(selected);
+                adapter.Changed(session.view, session.view.choices[i].id); SyncPaths();
+            }
         } else if (id >= ActionFirst && id <= ActionFirst + int(Action::RestoreExe) && notification == BN_CLICKED) {
             const auto action = Action(id - ActionFirst);
             if (action > Action::Play) {

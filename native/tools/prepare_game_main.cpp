@@ -18,11 +18,15 @@ void Print(const std::string& text){DWORD written=0;auto message=text+"\n";Write
 preparer::View View(const fs::path& game, const prepare::Settings& settings) {
     preparer::View v; v.game = game; v.executable = game / L"NeptuniaVII.exe";
     v.gameName = L"Megadimension Neptunia VII";
-    v.note = L"Your saved choices are loaded; advanced INI settings are kept. Prepared loading improvements are on for a new installation. FPS unlock and gameplay options are off.";
+    v.note = L"Your saved choices are loaded; advanced INI settings are kept. New installations enable prepared loading improvements and reduced battle loading frames. Render resolution, FPS unlock and gameplay options start off.";
     v.snapshot = std::make_shared<prepare::Settings>(settings);
     v.paths = {{"cache", L"Cache folder...", settings.cache}, {"assets", L"Unpacked assets...", settings.assets}};
     for (size_t i = 0; i < prepare::Features.size(); ++i)
-        v.features.push_back({Utf8(prepare::Features[i].key), prepare::Features[i].label, i < 4 ? 0u : 1u, settings.enabled[i]});
+        v.features.push_back({Utf8(prepare::Features[i].key), prepare::Features[i].label, i < 5 ? 0u : 1u, settings.enabled[i]});
+    preparer::Choice resolution{"render-resolution", L"Render resolution", {}, prepare::RenderSelection(settings)};
+    for (const auto& preset : prepare::RenderPresets) resolution.options.push_back(preset.label);
+    if (resolution.selected == prepare::RenderPresets.size()) resolution.options.push_back(L"Custom (keep current settings)");
+    v.choices.push_back(std::move(resolution));
     return v;
 }
 class Adapter final : public preparer::Adapter {
@@ -48,6 +52,9 @@ public:
         }
         for (size_t i = 0; i < prepare::Features.size(); ++i)
             for (const auto& f : view.features) if (f.id == Utf8(prepare::Features[i].key)) settings.enabled[i] = f.value;
+        for (const auto& choice : view.choices)
+            if (choice.id == "render-resolution" && choice.selected != prepare::RenderSelection(settings))
+                prepare::SelectRenderPreset(settings, choice.selected);
         using A = preparer::Action;
         try {
             if (action == A::Prepare) {
@@ -79,11 +86,21 @@ int Gui(const fs::path& source, const prepare::Settings& settings) {
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
     int argc=0;auto argv=CommandLineToArgvW(GetCommandLineW(),&argc);fs::path source,output,assets;bool gui=argc==1,install=false,recover=false,rollback=false,uninstall=false,query=false;
     std::vector<std::pair<size_t,bool>> changes;std::set<size_t> keys;std::string expectedHash;bool hasExpected=false;
+    size_t renderPreset = prepare::RenderPresets.size(); bool hasRenderPreset = false;
     try{
         for(int i=1;i<argc;++i){std::wstring arg=argv[i];
             if(arg==L"--gui")gui=true;else if(arg==L"--enable-only"||arg==L"--install")install=true;else if(arg==L"--recover")recover=true;else if(arg==L"--rollback")rollback=true;else if(arg==L"--uninstall")uninstall=true;else if(arg==L"--settings")query=true;
             else if((arg==L"--source"||arg==L"--output"||arg==L"--assets")&&i+1<argc)(arg==L"--source"?source:arg==L"--output"?output:assets)=argv[++i];
             else if(arg==L"--if-config-hash"&&i+1<argc){expectedHash=Utf8(argv[++i]);hasExpected=true;}
+            else if(arg==L"--render-resolution"&&i+1<argc){
+                if(hasRenderPreset)throw std::runtime_error("Use --render-resolution once");
+                const std::wstring value=argv[++i];
+                for(size_t p=0;p<prepare::RenderPresets.size();++p){const auto& preset=prepare::RenderPresets[p];
+                    const auto name=p?std::to_wstring(preset.width)+L"x"+std::to_wstring(preset.height):L"disabled";
+                    if(value==name){renderPreset=p;break;}}
+                if(renderPreset==prepare::RenderPresets.size())throw std::runtime_error("Choose a listed render resolution or disabled");
+                hasRenderPreset=true;
+            }
             else if(arg==L"--set"&&i+1<argc){std::wstring value=argv[++i];auto split=value.find(L'=');size_t k=0;for(;k<prepare::Features.size();++k)if(value.substr(0,split)==prepare::Features[k].key)break;
                 if(split==std::wstring::npos||k==prepare::Features.size()||(value.substr(split+1)!=L"0"&&value.substr(split+1)!=L"1")||!keys.insert(k).second)throw std::runtime_error("Use --set KnownFeature=0|1 once per feature");changes.emplace_back(k,value.substr(split+1)==L"1");
             }else if(arg==L"--help"){Print(
@@ -94,6 +111,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
                 "  --output CACHE         Choose the texture cache folder.\n"
                 "  --assets FOLDER        Choose the unpacked assets folder.\n"
                 "  --set Feature=0|1      Turn a feature off or on.\n"
+                "  --render-resolution   disabled, 640x360, 854x480, 960x540, 1280x720,\n"
+                "                        1600x900, 1920x1080, 2560x1440 or 3840x2160.\n"
                 "  --settings             Print saved settings as JSON.\n"
                 "  --if-config-hash HASH  Apply only if the settings still match this hash.\n"
                 "                         An empty hash means no INI file existed.\n"
@@ -103,13 +122,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
                 "  --recover              Recover an interrupted update.\n"
                 "Close the game before preparing, installing or using maintenance commands.");LocalFree(argv);return 0;}else throw std::runtime_error("Unknown or incomplete command-line option");
         }
-        LocalFree(argv);argv=nullptr;const int actions=int(recover)+int(rollback)+int(uninstall)+int(install)+int(query);const bool overrides=!output.empty()||!assets.empty()||!changes.empty()||hasExpected;
+        LocalFree(argv);argv=nullptr;const int actions=int(recover)+int(rollback)+int(uninstall)+int(install)+int(query);const bool overrides=!output.empty()||!assets.empty()||!changes.empty()||hasExpected||hasRenderPreset;
         if(actions>1||(gui&&actions)||((recover||rollback||uninstall||query)&&overrides))throw std::runtime_error("Select one action; settings overrides apply only to install, prepare or the window");
         if(source.empty())source=prepare::DetectGame();if(!source.empty())source=prepare::GameFolder(source);if(source.empty()&&!gui)throw std::runtime_error("Game not detected; supply --source GAME");
         if(rollback){Print(Utf8(prepare::RollbackGame(source)));return 0;}if(uninstall){prepare::UninstallGame(source);Print("Patch uninstalled. Your settings and prepared data were kept.");return 0;}if(recover){prepare::RecoverGame(source);Print("Interrupted update recovered. Installed files checked.");return 0;}
         auto settings=source.empty()?prepare::Settings{}:prepare::ReadSettings(source);if(!output.empty())settings.cache=fs::absolute(output).lexically_normal();if(!assets.empty())settings.assets=fs::absolute(assets).lexically_normal();for(const auto& change:changes)settings.enabled[change.first]=change.second;if(hasExpected)settings.configHash=expectedHash;
+        if(hasRenderPreset)prepare::SelectRenderPreset(settings,renderPreset);
         if(gui)return Gui(source,settings);
-        if(query){std::string result="{\"cache\":"+Json(Utf8(settings.cache.wstring()))+",\"assets\":"+Json(Utf8(settings.assets.wstring()))+",\"config_sha256\":"+Json(settings.configHash)+",\"features\":{";for(size_t i=0;i<prepare::Features.size();++i){if(i)result+=',';result+=Json(Utf8(prepare::Features[i].key))+":"+(settings.enabled[i]?"true":"false");}Print(result+"}}");return 0;}
+        if(query){std::string result="{\"cache\":"+Json(Utf8(settings.cache.wstring()))+",\"assets\":"+Json(Utf8(settings.assets.wstring()))+",\"config_sha256\":"+Json(settings.configHash)+",\"render_resolution\":{\"enabled\":"+(settings.renderEnabled?"true":"false")+",\"width\":"+std::to_string(settings.renderWidth)+",\"height\":"+std::to_string(settings.renderHeight)+"},\"features\":{";for(size_t i=0;i<prepare::Features.size();++i){if(i)result+=',';result+=Json(Utf8(prepare::Features[i].key))+":"+(settings.enabled[i]?"true":"false");}Print(result+"}}");return 0;}
         if(install){Print(prepare::ApplySettings(source,settings)?"Patch and settings applied.":"Patch and settings are already up to date.");return 0;}
         uint64_t last=UINT64_MAX;auto report=[&](const prepare::Progress& p){if(p.files/1000!=last){last=p.files/1000;Print("{\"progress_files\":"+std::to_string(p.files)+",\"total_files\":"+std::to_string(p.totalFiles)+",\"bytes\":"+std::to_string(p.bytes)+"}");}};
         auto result=prepare::Run(source,settings,report);Print("{\"complete\":true,\"generated\":"+std::to_string(result.generated)+",\"reused\":"+std::to_string(result.reused)+",\"unsupported\":"+std::to_string(result.unsupported)+"}");return 0;

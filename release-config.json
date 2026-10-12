@@ -88,6 +88,12 @@
     ],
     [
       "native/test-runtime-overhead.cmd"
+    ],
+    [
+      "native/test-battle-loading-present.cmd"
+    ],
+    [
+      "native/test-early-graphics.cmd"
     ]
   ],
   "package_files": [

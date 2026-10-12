@@ -1,11 +1,11 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "source": "scaffold-game-preparer/assets/common",
   "files": {
     ".gitattributes": "0ac16869a4396d985143333561e05765db07ecb4270d25345fa8cd14411d9d05",
-    "preparer.cpp": "bce519e2e61db09e1786b43923e1fd45c768c111e6c50b6cff43e3cae1b2f332",
-    "preparer.hpp": "2101c61e37f3bacfa39034b5a1452cfa13ace7c1d96f51489ba3dbf1358fc63c",
-    "preparer_win32.cpp": "905ba5b6bc76c9cdf8df5d10a6735373bf014583384084c6fcef1d381c6adaaa",
-    "session_test.cpp": "23591b12368865b56db7480c20da79ddcd8bc476d8a20e9022b46a6359069363"
+    "preparer.cpp": "ce639d2e5f999cfbb2b449ed7996c0d9d01ef1f7e009ef91266ec99d55b0cbcf",
+    "preparer.hpp": "e1b4360988dc9e114ccda2fe5e7afb2417d9e00e60b64a25540fa3e9b7c21a69",
+    "preparer_win32.cpp": "8380a1824eaef04913d95a0b3065bab9d8a9d7a86e1b9e29872aa61aa6cafb13",
+    "session_test.cpp": "67a1af4427fc13b4b81480fbc4f2d3b7c2618f24897129657887d9f5e2a21daf"
   }
 }

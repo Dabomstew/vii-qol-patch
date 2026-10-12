@@ -82,7 +82,7 @@ class Settings(Transactions):
     def test_template_and_runtime_defaults(self):
         entries = re.findall(r'\{L"(\w+)", L"[^"]+", (true|false), (true|false)\}',
                              (ROOT / 'native/include/prepare_settings.hpp').read_text())
-        self.assertEqual(len(entries), 10)
+        self.assertEqual(len(entries), 11)
         template = ini(ROOT / 'native/vii-patches.ini')
         runtime = (ROOT / 'native/src/core.cpp').read_text()
         self.run_app('--install')
@@ -95,6 +95,10 @@ class Settings(Transactions):
             if key == 'UnlockFPSDuringLoads':
                 self.assertIn('Option(context, L"Patches", L"UnlockFPSDuringLoads", 0)',
                               (ROOT / 'native/src/load_timing.cpp').read_text())
+                continue
+            if key == 'SkipBattleLoadingPresent':
+                self.assertIn('Option(context,L"Patches",L"SkipBattleLoadingPresent",1)', runtime)
+                self.assertEqual(fallback, 'true')
                 continue
             match = re.search(r'\{L"' + key + r'",\w+(?:,([01]))?\}', runtime)
             self.assertIsNotNone(match)
@@ -116,6 +120,18 @@ class Settings(Transactions):
         self.run_app('--install', '--set', 'BattleAutoSkip=0')
         self.assertFalse(self.query()['features']['BattleAutoSkip'])
 
+    def test_battle_loading_present_is_explicit_and_preserved(self):
+        self.run_app('--install')
+        self.assertTrue(self.query()['features']['SkipBattleLoadingPresent'])
+        self.run_app('--install', '--set', 'SkipBattleLoadingPresent=1')
+        self.assertTrue(self.query()['features']['SkipBattleLoadingPresent'])
+        self.run_app('--install')
+        self.assertTrue(self.query()['features']['SkipBattleLoadingPresent'])
+        self.run_app('--install', '--set', 'SkipBattleLoadingPresent=0')
+        self.assertFalse(self.query()['features']['SkipBattleLoadingPresent'])
+        self.run_app('--install')
+        self.assertFalse(self.query()['features']['SkipBattleLoadingPresent'])
+
     def test_jp_balance_defaults_and_roundtrip(self):
         config = self.game / 'vii-patches.ini'
         self.assertFalse(self.query()['features']['JPBattleBalance'])
@@ -134,6 +150,64 @@ class Settings(Transactions):
         self.assertEqual(parsed['Patches']['Mystery'], '7')
         self.assertEqual(parsed['Other']['Keep'], 'yes')
         self.assertIn('; Keep my notes', config.read_text(encoding='utf-16'))
+
+    def test_render_presets_enable_dependencies_and_preserve_other_settings(self):
+        config = self.game / 'vii-patches.ini'
+        config.write_text('; Keep graphics notes\n[Patches]\nNeptasm=0\n'
+                          'SkipBattleLoadingPresent=1\n[Neptasm]\nResolution=0\n'
+                          'ResolutionScale=0.25\nCameraUnlock=1\nWindowControl=1\n'
+                          'WindowWidth=1366\nWindowHeight=768\n[CustomSection]\nKeep=yes\n')
+        for width, height in ((640, 360), (854, 480), (960, 540), (1280, 720), (1600, 900),
+                              (1920, 1080), (2560, 1440), (3840, 2160)):
+            self.run_app('--install', '--render-resolution', f'{width}x{height}')
+            parsed = ini(config)
+            self.assertTrue(parsed.getboolean('Patches', 'Neptasm'))
+            self.assertTrue(parsed.getboolean('Neptasm', 'Resolution'))
+            self.assertEqual(self.query()['render_resolution'], dict(enabled=True, width=width, height=height))
+            self.assertEqual(parsed['Neptasm']['ResolutionScale'], '0.25')
+            self.assertEqual(parsed['Neptasm']['WindowWidth'], '1366')
+            self.assertEqual(parsed['Neptasm']['WindowHeight'], '768')
+            self.assertTrue(parsed.getboolean('Neptasm', 'CameraUnlock'))
+            self.assertTrue(parsed.getboolean('Patches', 'SkipBattleLoadingPresent'))
+            self.assertEqual(parsed['CustomSection']['Keep'], 'yes')
+        self.run_app('--install', '--render-resolution', 'disabled')
+        parsed = ini(config)
+        self.assertFalse(parsed.getboolean('Neptasm', 'Resolution'))
+        self.assertEqual(self.query()['render_resolution'], dict(enabled=False, width=0, height=0))
+        self.assertTrue(parsed.getboolean('Patches', 'Neptasm'))
+        self.assertTrue(parsed.getboolean('Neptasm', 'CameraUnlock'))
+        self.assertIn('; Keep graphics notes', config.read_text(encoding='utf-16'))
+
+    def test_render_custom_and_legacy_configuration_is_preserved(self):
+        config = self.game / 'vii-patches.ini'
+        for width, height, enabled in ((1111, 625, 1), (0, 0, 1), (1280, 720, 0)):
+            config.write_text(f'[Patches]\nNeptasm={enabled}\n[Neptasm]\nResolution=1\n'
+                              f'RenderWidth={width}\nRenderHeight={height}\nResolutionScale=0.5\n')
+            self.run_app('--install', '--set', 'EventSkipBuffer=1')
+            parsed = ini(config)
+            self.assertEqual(parsed.getint('Patches', 'Neptasm'), enabled)
+            self.assertTrue(parsed.getboolean('Neptasm', 'Resolution'))
+            self.assertEqual(self.query()['render_resolution'], dict(enabled=bool(enabled), width=width, height=height))
+            self.assertEqual(parsed['Neptasm']['ResolutionScale'], '0.5')
+            before = config.read_bytes()
+            self.run_app('--install')
+            self.assertEqual(config.read_bytes(), before)
+
+    def test_render_invalid_cli_and_stale_choices_do_not_write(self):
+        for args in (('--render-resolution', '123x456'), ('--render-resolution', '1280x0'),
+                     ('--render-resolution', '1280x720', '--render-resolution', 'disabled'),
+                     ('--settings', '--render-resolution', '1280x720')):
+            before = self.contents()
+            self.run_app('--install', *args, success=False)
+            self.assertEqual(self.contents(), before)
+        self.run_app('--install')
+        stale = self.query()['config_sha256']
+        config = self.game / 'vii-patches.ini'
+        with config.open('a', encoding='utf-16') as file:
+            file.write('\n[CustomSection]\nKeep=changed\n')
+        before = self.contents()
+        self.run_app('--install', '--render-resolution', '1280x720', '--if-config-hash', stale, success=False)
+        self.assertEqual(self.contents(), before)
 
     def test_load_and_preview_settings_migrate_and_roundtrip(self):
         config = self.game / 'vii-patches.ini'

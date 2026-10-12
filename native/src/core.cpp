@@ -1,4 +1,5 @@
 #include "patch.hpp"
+#include "battle_loading_present.hpp"
 #include <bcrypt.h>
 #include <cstdarg>
 #include <cstdio>
@@ -50,7 +51,12 @@ void Initialize(HMODULE proxy) noexcept {
             if(!Option(context,L"Patches",patch.name,patch.defaultEnabled)) {Log("Patch disabled: %ls",patch.name);continue;}
             Log("Patch %ls: %s",patch.name,patch.install(context)?"installed":"not installed");
         }
-        Log("LoadTiming: %s",InstallLoadTiming(context)?"installed":"not installed");
+        const bool loadTiming = InstallLoadTiming(context);
+        Log("LoadTiming: %s",loadTiming?"installed":"not installed");
+        if (Option(context,L"Patches",L"SkipBattleLoadingPresent",1))
+            Log("Patch SkipBattleLoadingPresent: %s",
+                loadTiming && InstallSkipBattleLoadingPresent(context)?"installed":"not installed");
+        else Log("Patch disabled: SkipBattleLoadingPresent");
     } catch(const std::exception& error) {Log("Initialization failed: %s",error.what());}
     catch(...) {Log("Initialization failed with unknown exception");}
 }

@@ -1,5 +1,6 @@
 #include "load_timing.hpp"
 #include "code_calls.hpp"
+#include "battle_loading_present.hpp"
 #include <atomic>
 #include <cstring>
 
@@ -117,7 +118,11 @@ uint32_t __cdecl BattleHook(uint32_t command, uint32_t mode, void* task) {
     else if (mode == 2) {
         if (!ReadPhase(task, beforeObject, beforePhase) || beforePhase != 2) Observe(task, false);
     }
-    const auto result = originalBattle(command, mode, task);
+    const auto presentPoll = BeginBattleLoadingPresent(task, mode);
+    uint32_t result = 0;
+    bool returned = false;
+    __try { result = originalBattle(command, mode, task); returned = true; }
+    __finally { EndBattleLoadingPresent(presentPoll, returned); }
     // State 1 -> 2 is an unconditional scheduling step. Only a call which
     // enters AND leaves state 2 proves the original resource predicate waited.
     if (mode == 2) Observe(task, false, beforePhase == 2 ? beforeObject : 0);
