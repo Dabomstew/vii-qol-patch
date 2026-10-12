@@ -56,8 +56,8 @@ class ResolutionUI(Transactions):
                     user.SendMessageW(checkbox, 0xf5, 0, 0)  # BM_CLICK
                     self.assertEqual(user.SendMessageW(checkbox, 0xf0, 0, 0), target)
                     user.SendMessageW(hwnd, 0x111, 600, user.GetDlgItem(hwnd, 600))
-                    wait_for(lambda: json.loads(self.run_app('--settings'))['features']['SkipBattleLoadingPresent'] == bool(target))
                     wait_for(lambda: bool(user.IsWindowEnabled(user.GetDlgItem(hwnd, 404))))
+                    wait_for(lambda: json.loads(self.run_app('--settings'))['features']['SkipBattleLoadingPresent'] == bool(target))
                     self.assertEqual(ini(self.game / 'vii-patches.ini').getboolean('Patches', 'SkipBattleLoadingPresent'), bool(target))
                 user.PostMessageW(hwnd, 0x10, 0, 0)
                 self.assertEqual(process.wait(timeout=10), 0)
@@ -101,16 +101,16 @@ class ResolutionUI(Transactions):
                 user.SendMessageW(hwnd, 0x111, 500 | (1 << 16), control)  # CBN_SELCHANGE
                 user.SendMessageW(hwnd, 0x111, 600, user.GetDlgItem(hwnd, 600))  # Install
             select(4)  # 1280 x 720
-            wait_for(lambda: self.run_app('--settings').find('"enabled":true,"width":1280,"height":720') >= 0)
             wait_for(lambda: bool(user.IsWindowEnabled(user.GetDlgItem(hwnd, 500))))
+            wait_for(lambda: self.run_app('--settings').find('"enabled":true,"width":1280,"height":720') >= 0)
             parsed = ini(config)
             self.assertTrue(parsed.getboolean('Patches', 'Neptasm'))
             self.assertTrue(parsed.getboolean('Neptasm', 'Resolution'))
             self.assertTrue(parsed.getboolean('Neptasm', 'CameraUnlock'))
             self.assertEqual(user.SendMessageW(user.GetDlgItem(hwnd, 500), 0x147, 0, 0), 4)
             select(0)
-            wait_for(lambda: self.run_app('--settings').find('"enabled":false,"width":0,"height":0') >= 0)
             wait_for(lambda: bool(user.IsWindowEnabled(user.GetDlgItem(hwnd, 500))))
+            wait_for(lambda: self.run_app('--settings').find('"enabled":false,"width":0,"height":0') >= 0)
             parsed = ini(config)
             self.assertFalse(parsed.getboolean('Neptasm', 'Resolution'))
             self.assertTrue(parsed.getboolean('Patches', 'Neptasm'))

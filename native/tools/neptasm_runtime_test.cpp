@@ -193,27 +193,29 @@ static void StaticAndWindowControls(){
         CHECK(*reinterpret_cast<uint32_t*>(image+0x6f04cc+i*8)==720);}
     State graphics;graphics.context=context;graphics.settings.fitWindow=true;state=&graphics;
     originalCreate=CaptureCreation;aspectPatched=false;
-    RECT rect{0,0,1280,540};CHECK(AdjustWindowRect(&rect,WS_OVERLAPPEDWINDOW,FALSE));
+    // Keep hidden fixtures within the small desktop of hosted Windows runners.
+    // Overlapped windows can be clamped at creation to the desktop maximum.
+    RECT rect{0,0,640,270};CHECK(AdjustWindowRect(&rect,WS_OVERLAPPEDWINDOW,FALSE));
     HWND window=CreateWindowW(L"STATIC",L"FitWindow fixture",WS_OVERLAPPEDWINDOW,0,0,
         rect.right-rect.left,rect.bottom-rect.top,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     CHECK(window);DXGI_SWAP_CHAIN_DESC desc{};desc.BufferDesc.Width=1920;desc.BufferDesc.Height=1080;desc.OutputWindow=window;
     CHECK(CreateDevice(nullptr,D3D_DRIVER_TYPE_NULL,nullptr,0,nullptr,0,0,&desc,nullptr,nullptr,nullptr,nullptr)==E_FAIL);
-    CHECK(capturedWidth==1280&&capturedHeight==540);CHECK(aspectPatched);
+    CHECK(capturedWidth==640&&capturedHeight==270);CHECK(aspectPatched);
     const auto operand=*reinterpret_cast<uint32_t*>(image+0x1081e2);
-    CHECK(image[0x1081e1]==5&&std::abs(*reinterpret_cast<float*>(operand)-1280.0f/540)<0.00001f);
-    CHECK(std::abs(*reinterpret_cast<float*>(image+0x5bdc94)-1280.0f/540)<0.00001f);
+    CHECK(image[0x1081e1]==5&&std::abs(*reinterpret_cast<float*>(operand)-640.0f/270)<0.00001f);
+    CHECK(std::abs(*reinterpret_cast<float*>(image+0x5bdc94)-640.0f/270)<0.00001f);
     CHECK(desc.BufferDesc.Width==1920&&desc.BufferDesc.Height==1080); // Caller input stays unchanged.
     CHECK(DestroyWindow(window));
-    RECT initial{0,0,1366,768};CHECK(AdjustWindowRect(&initial,WS_OVERLAPPEDWINDOW,FALSE));
+    RECT initial{0,0,800,450};CHECK(AdjustWindowRect(&initial,WS_OVERLAPPEDWINDOW,FALSE));
     window=CreateWindowW(L"STATIC",L"Custom window fixture",WS_OVERLAPPEDWINDOW,0,0,
         initial.right-initial.left,initial.bottom-initial.top,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     CHECK(window);graphics.settings.fitWindow=false;graphics.settings.windowControl=true;
-    graphics.settings.windowWidth=1280;graphics.settings.windowHeight=720;
-    desc.BufferDesc.Width=1366;desc.BufferDesc.Height=768;desc.OutputWindow=window;desc.Windowed=TRUE;
+    graphics.settings.windowWidth=640;graphics.settings.windowHeight=360;
+    desc.BufferDesc.Width=800;desc.BufferDesc.Height=450;desc.OutputWindow=window;desc.Windowed=TRUE;
     CHECK(CreateDevice(nullptr,D3D_DRIVER_TYPE_NULL,nullptr,0,nullptr,0,0,&desc,nullptr,nullptr,nullptr,nullptr)==E_FAIL);
-    CHECK(capturedWidth==1280&&capturedHeight==720);
-    RECT client{};CHECK(GetClientRect(window,&client));CHECK(client.right==1280&&client.bottom==720);
-    CHECK(desc.BufferDesc.Width==1366&&desc.BufferDesc.Height==768);
+    CHECK(capturedWidth==640&&capturedHeight==360);
+    RECT client{};CHECK(GetClientRect(window,&client));CHECK(client.right==640&&client.bottom==360);
+    CHECK(desc.BufferDesc.Width==800&&desc.BufferDesc.Height==450);
     CHECK(DestroyWindow(window));graphics.settings.windowControl=false;
     graphics.settings.fitWindow=false;graphics.settings.ultrawide=true;
     desc.BufferDesc.Width=1600;desc.BufferDesc.Height=900;
